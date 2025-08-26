@@ -1,0 +1,62 @@
+# LAMMPS input script for Ar deposition on Si substrate (Final Corrected Version)
+# ----------------------------------------------------
+
+# STEP 1: Initialization
+# ----------------------
+units           metal
+boundary        p p f
+atom_style      atomic
+
+# STEP 2: System Definition
+# -------------------------
+lattice         diamond 5.431
+region          si_region block 0 10 0 10 0 15
+create_box      2 si_region
+create_atoms    1 region si_region
+
+mass            1 28.0855  # Mass for Si (type 1)
+mass            2 39.948   # Mass for Ar (type 2)
+
+# STEP 3: Force Field (Hybrid Potential)
+# ------------------------------------
+pair_style      hybrid/overlay sw lj/cut 10.0
+pair_coeff      * * sw Si.sw Si Ar
+pair_coeff      2 2 lj/cut 0.0103 3.405
+pair_coeff      1 2 lj/cut 0.0045 2.72
+
+# STEP 4: Grouping and Initial Settings
+# -------------------------------------
+region          bottom_layer block INF INF INF INF 0 2
+group           si_atoms type 1
+group           bottom_fix region bottom_layer
+group           thermo_atoms subtract si_atoms bottom_fix
+
+minimize        1.0e-5 1.0e-7 1000 10000
+velocity        thermo_atoms create 300.0 12345
+
+# STEP 5: Equilibration of Substrate
+# ----------------------------------
+fix             1 thermo_atoms nvt temp 300.0 300.0 0.1
+fix             2 bottom_fix setforce 0.0 0.0 0.0
+timestep        0.001
+thermo          1000
+thermo_style    custom step temp pe etotal press
+run             5000
+unfix           1
+
+# STEP 6: Ar Atom Deposition
+# --------------------------
+# Redefine thermostat group to include incoming Ar atoms
+group           mobile subtract all bottom_fix
+# より強力なLangevinサーモスタットに変更
+fix             3 mobile langevin 300.0 300.0 0.1 587283
+
+# Create Ar atoms and run deposition
+region          ar_source block 2 8 2 8 10 12
+fix             ar_deposit all deposit 100 2 100 54321 region ar_source vz -0.1 -0.1
+
+dump            1 all atom 100 dump.si_ar.atom
+run             20000
+
+# ----------------------------------------------------
+# End of Script

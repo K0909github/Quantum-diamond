@@ -1,0 +1,50 @@
+# LAMMPS input script for Nitrogen irradiation on a Graphene sheet
+# 【新提案】グラフェンシートへのNイオン照射シミュレーション
+
+# ----------------- 1. 初期設定 -----------------
+units           metal
+dimension       3
+boundary        p p f
+atom_style      atomic
+atom_modify     map array
+
+# ----------------- 2. グラフェンシートの作成 -----------------
+# グラフェン用の格子を設定
+lattice         hcp 1.42
+region          sim_box block -15 15 -15 15 -1 1 units box
+create_box      2 sim_box
+
+# create_atomsでグラフェンシートを作成
+create_atoms    1 single 0 0 0 basis 1 1 basis 2 2
+replicate       20 20 1
+
+group           graphene type 1
+
+# ----------------- 3. ポテンシャルと質量の設定 -----------------
+pair_style      tersoff
+pair_coeff      * * BNC.tersoff C N
+mass            1 12.011
+mass            2 14.007
+
+# ----------------- 4. 平衡化 (NVT) -----------------
+# グラフェンは元々安定なため、最小化や圧力緩和は不要
+reset_timestep  0
+timestep        0.0005
+fix             1 graphene nvt temp 300.0 300.0 0.1
+thermo          1000
+thermo_style    custom step temp pe ke etotal press
+run             10000
+unfix           1
+
+# ----------------- 5. 窒素イオン照射 -----------------
+reset_timestep  0
+fix             1 graphene nvt temp 300.0 300.0 0.1
+fix             2 all implant 1 2 20 12345 100.0 zhi 5.0
+
+thermo          100
+dump            1 all custom 100 dump.graphene_irradiation.*.xyz id type x y z
+dump_modify     1 element C N
+run             20000
+
+# ----------------- シミュレーション終了 -----------------
+print           "Simulation finished."

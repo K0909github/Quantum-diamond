@@ -1,0 +1,38 @@
+# LAMMPS input script for silicon substrate simulation (Final Version)
+# ----------------------------------------------------
+
+# STEP 1: Initialization
+units           metal
+boundary        p p p
+atom_style      atomic
+
+# STEP 2: System Definition
+lattice         diamond 5.431
+region          box block 0 10 0 10 0 6
+create_box      1 box
+create_atoms    1 box
+
+# STEP 3: Force Field and Minimization
+pair_style      sw
+pair_coeff      * * Si.sw Si
+mass            1 28.0855
+minimize        1.0e-5 1.0e-7 1000 10000
+
+# STEP 4: Equilibration (Gradual Heating)
+# ---------------------------------------
+timestep        0.0001
+velocity        all create 10.0 12345
+fix             1 all nvt temp 10.0 300.0 0.01  # <-- ★ tdampを修正
+run             5000                           # <-- ★ 加熱時間を延長
+unfix           1
+
+# STEP 5: Production Run
+# ----------------------
+timestep        0.001
+fix             1 all nve
+thermo          500
+thermo_style    custom step temp pe etotal press
+dump            1 all atom 1000 dump.atom
+run             10000
+
+# End of Script
