@@ -1,0 +1,76 @@
+# NV centers via N2 injection into diamond (LAMMPS, units metal)
+
+
+# We'll assign the center-of-mass velocity of the N2 so that each atom has ~Einj_eV.
+# Use downward injection along -z with small lateral spread.
+variable vx equal 0.0
+variable vy equal 0.0
+variable vz equal -${vmag}
+
+
+# Timestep for high-energy impacts: 0.1 fs for stability during impact
+unfix nvt1
+fix nvt1 g_mobile nvt temp 300 300 0.01
+reset_timestep 0
+variable nsteps_between equal 3000 # MD steps between depositions
+
+
+dump d1 all custom 1000 traj_inject.lammpstrj id type q x y z vx vy vz
+
+
+# Use a loop to deposit and run between events (more controllable than fix/deposit)
+label loopinj
+variable i loop ${n_events}
+
+
+# Insert an N2 molecule at random (x,y) within rinj, oriented along z
+# Place via create_atoms mol in a temp group, then set its velocity
+group g_temp clear
+create_atoms 2 random 1 987654 rinj mol n2 12345
+group g_temp type 2
+velocity g_temp set ${vx} ${vy} ${vz} sum yes
+
+
+run ${nsteps_between}
+
+
+# Clean temp group for next iteration
+group g_temp clear
+next i
+jump SELF loopinj
+
+
+undump d1
+
+
+# --- Post-impact anneal to promote vacancy diffusion and NV formation ---
+# Two-stage anneal: heat to 1600 K then cool to 300 K
+reset_timestep 0
+unfix nvt1
+fix nvt2 g_mobile nvt temp 300 1600 0.1
+thermo 500
+
+
+timestep 0.002 # 2 fs
+run 50000 # 100 ps heat
+
+
+unfix nvt2
+fix nvt3 g_mobile nvt temp 1600 300 0.1
+run 50000 # 100 ps cool
+
+
+# Final relax
+unfix nvt3
+fix nvt4 g_mobile nvt temp 300 300 0.1
+run 20000 # 40 ps at 300 K
+
+
+# --- Output final snapshot for analysis ---
+dump df all custom 1 final_snapshot.lammpstrj id type q x y z
+run 1
+undump df
+
+
+write_data final.data
+print "Simulation complete. Analyze final_snapshot.lammpstrj with post_nv_distance.py"

@@ -1,9 +1,4 @@
 # LAMMPS output files
-#log.lammps
-*.log
-dump.*
-*.dump
-*.atom
+
 
 # OVITO session files
-#*.ovito
