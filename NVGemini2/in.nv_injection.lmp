@@ -47,6 +47,9 @@ run             10000
 unfix           1
 unfix           2
 
+# ========== 全シミュレーション過程の可視化用出力 ==========
+dump            viz_dump all custom 10000 trajectory.dump id type x y z
+
 # ========== 6. 窒素イオン注入 (Nitrogen Ion Implantation) ==========
 # 論文に記載の1.6 keVのエネルギーで窒素イオンを注入
 variable        energy_eV equal 1600.0

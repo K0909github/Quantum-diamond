@@ -66,6 +66,9 @@ run             10000
 unfix           1
 unfix           2
 
+# ========== 全シミュレーション過程の可視化用出力 ==========
+dump            viz_dump all custom 10000 trajectory.dump id type x y z
+
 # ========== 6. 炭素イオン注入 (Carbon Ion Implantation) ==========
 # 最適収率が得られた2.0 keVのエネルギーで炭素イオンを注入 
 # 2.0 keVを速度に変換 (eV -> J, amu -> kg, Å/ps -> m/s)
