@@ -1,4 +1,10 @@
+
 # NVセンターを用いた量子コンピュータ研究
+
+## 参考リンク
+
+- [LAMMPS チュートリアル（外部）](https://github.com/mrkllntschpp/lammps-tutorials)
+- [LAMMPS公式ポテンシャルファイル集](https://github.com/lammps/lammps/tree/develop/potentials)
 
 これは卒業研究で行った LAMMPS (Large-scale Atomic/Molecular Massively Parallel Simulator) による分子動力学（MD）シミュレーションの記録です。
 
