@@ -418,3 +418,106 @@ Total # of neighbors = 629772
 Ave neighs/atom = 46.157432
 Neighbor list builds = 517
 Dangerous builds = 2
+unfix           fNVT
+unfix           fLAN
+
+fix             fNVT newton_atoms nvt temp 1600.0 293.0 0.5
+fix             fLAN thermostat_atoms langevin 1600.0 293.0 0.5 11223
+run             ${ncool}
+run             5000
+Per MPI rank memory allocation (min/avg/max) = 5.229 | 5.231 | 5.234 Mbytes
+   Step        Atoms         Temp          PotEng         KinEng         TotEng         Press     
+     29000       13644   1813.1702     -30122.65       3197.5187     -26925.131      1574015.1    
+     29500       13642   3094.1993     -25373.437      5455.8086     -19917.629      1633420.2    
+     30000       13636   3314.8132     -23345.985      5842.2325     -17503.753      1638006.5    
+     30500       13631   3345.1773     -24156.853      5893.5861     -18263.267      1612967.1    
+     31000       13629   3163.4259     -24282.895      5572.5558     -18710.339      1619915.9    
+     31500       13627   3066.4647     -24084.003      5400.9605     -18683.042      1613024.4    
+     32000       13625   2877.1496     -25169.866      5066.7761     -20103.09       1620005.3    
+     32500       13619   2721.8416     -26890.613      4791.1615     -22099.452      1591310      
+     33000       13616   2546.9994     -27447.645      4482.4053     -22965.24       1585440.9    
+     33500       13615   2432.1143     -28790.36       4279.9073     -24510.453      1561634      
+     34000       13615   2257.9386     -29844.446      3973.402      -25871.044      1556584.8    
+Loop time of 125.974 on 4 procs for 5000 steps with 13615 atoms
+
+Performance: 3.429 ns/day, 6.999 hours/ns, 39.691 timesteps/s, 540.390 katom-step/s
+97.2% CPU use with 4 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 101.18     | 105.13     | 109.29     |  31.1 | 83.46
+Neigh   | 3.1208     | 3.176      | 3.2702     |   3.4 |  2.52
+Comm    | 11.885     | 16.193     | 20.252     |  81.9 | 12.85
+Output  | 0.085265   | 0.097017   | 0.10982    |   2.9 |  0.08
+Modify  | 1.1213     | 1.1745     | 1.2392     |   4.7 |  0.93
+Other   |            | 0.2013     |            |       |  0.16
+
+Nlocal:        3403.75 ave        3480 max        3331 min
+Histogram: 2 0 0 0 0 0 0 0 1 1
+Nghost:           3248 ave        3314 max        3183 min
+Histogram: 2 0 0 0 0 0 0 0 0 2
+Neighs:              0 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+FullNghs:       156774 ave      160971 max      152891 min
+Histogram: 2 0 0 0 0 0 0 0 1 1
+
+Total # of neighbors = 627098
+Ave neighs/atom = 46.059346
+Neighbor list builds = 306
+Dangerous builds = 0
+unfix           fNVT
+unfix           fLAN
+
+fix             fNVT newton_atoms nvt temp 293.0 293.0 0.1
+fix             fLAN thermostat_atoms langevin 293.0 293.0 0.1 33445
+run             ${nfinal}
+run             5000
+Per MPI rank memory allocation (min/avg/max) = 5.229 | 5.231 | 5.234 Mbytes
+   Step        Atoms         Temp          PotEng         KinEng         TotEng         Press     
+     34000       13615   2257.9386     -29844.446      3973.402      -25871.044      1556584.8    
+     34500       13613   747.21244     -33734.361      1314.7121     -32419.649      1243402.1    
+     35000       13613   585.87855     -34231.57       1030.8469     -33200.723      1229260.1    
+     35500       13613   585.78185     -34066.613      1030.6768     -33035.936      1243805.5    
+     36000       13613   574.92713     -33816.452      1011.578      -32804.874      1263830.5    
+     36500       13612   562.96016     -34277.956      990.4495      -33287.507      1266805.2    
+     37000       13612   580.75949     -34133.207      1021.7649     -33111.442      1269679.5    
+     37500       13612   579.10242     -34033.905      1018.8495     -33015.056      1286931.5    
+     38000       13612   582.31029     -34426.436      1024.4933     -33401.943      1288205.6    
+     38500       13612   570.38353     -34052.44       1003.5099     -33048.93       1314511.1    
+     39000       13612   545.70252     -33421.305      960.0871      -32461.218      1315433.7    
+Loop time of 95.8823 on 4 procs for 5000 steps with 13612 atoms
+
+Performance: 4.506 ns/day, 5.327 hours/ns, 52.147 timesteps/s, 709.829 katom-step/s
+97.2% CPU use with 4 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 76.7       | 79.283     | 81.905     |  26.2 | 82.69
+Neigh   | 0.88173    | 0.90794    | 0.9228     |   1.6 |  0.95
+Comm    | 11.522     | 14.16      | 16.763     |  62.2 | 14.77
+Output  | 0.095052   | 0.10757    | 0.11973    |   2.8 |  0.11
+Modify  | 1.0885     | 1.1214     | 1.1511     |   2.4 |  1.17
+Other   |            | 0.3023     |            |       |  0.32
+
+Nlocal:           3403 ave        3479 max        3324 min
+Histogram: 1 1 0 0 0 0 0 0 0 2
+Nghost:         3245.5 ave        3309 max        3169 min
+Histogram: 1 0 1 0 0 0 0 0 0 2
+Neighs:              0 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+FullNghs:       156780 ave      160181 max      153166 min
+Histogram: 1 1 0 0 0 0 0 0 1 1
+
+Total # of neighbors = 627120
+Ave neighs/atom = 46.071114
+Neighbor list builds = 93
+Dangerous builds = 0
+unfix           fNVT
+unfix           fLAN
+
+print           "Mini simulation finished."
+Mini simulation finished.
+
+Total wall time: 0:15:57
