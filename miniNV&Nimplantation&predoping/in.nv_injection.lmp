@@ -103,6 +103,10 @@ variable        v_mps        equal sqrt(2*${energy_J}/${mass_kg})
 variable        v_Aps        equal ${v_mps}/1.0e10
 
 compute_modify  thermo_temp dynamic/dof yes
+## OVITO: high-cadence dump during implantation (includes velocities)
+dump            dimpl all custom 100 mini_implant.dump id type x y z vx vy vz
+dump_modify     dimpl sort id
+
 ## Integrate during implantation: NVE on mobile atoms, Langevin on bottom
 fix             fNVE    newton_atoms nve
 fix             fLAN_imp thermostat_atoms langevin 293.0 293.0 0.1 224466
@@ -114,6 +118,7 @@ print           "Deposited ions during implant: ${ndeposit}"
 unfix           implant
 unfix           fLAN_imp
 unfix           fNVE
+undump          dimpl
 
 # post-implant short relax
 fix             fNVT newton_atoms nvt temp 293.0 293.0 0.1
