@@ -1,0 +1,108 @@
+# ========== 1. 初期設定 (Initialization) ==========
+units           metal
+dimension       3
+boundary        p p f  # X,Y方向は周期的、Z方向は固定的 
+atom_style      atomic
+
+# ========== 2. シミュレーションボックスと原子の作成 (Box and Atom Creation) ==========
+# ダイヤモンドの格子定数 (3.57 Å)
+lattice         diamond 3.57
+# シミュレーションボックスの定義 論文の寸法に合わせる 
+region          box block 0 40 0 40 0 30 units lattice
+create_box      2 box
+
+# ダイヤモンド構造の作成
+create_atoms    1 box
+
+# 原子タイプ: 1=Carbon, 2=Nitrogen
+mass            1 12.011
+mass            2 14.007
+
+# 領域の定義 (ニュートン層、サーモスタット層) 
+region          newton_layer block INF INF INF INF 2 28 units lattice
+region          thermostat_layer block INF INF INF INF 0 2 units lattice
+group           newton_atoms region newton_layer
+group           thermostat_atoms region thermostat_layer
+group           simulation_atoms union newton_atoms thermostat_atoms
+
+
+
+
+# ========== 4. ポテンシャルの設定 (Potential Setup) ==========
+pair_style      tersoff/zbl
+pair_coeff      * * BNC_tersoff_zbl.potential C N
+neighbor        2.0 bin
+neigh_modify    delay 10 check yes
+
+# ========== 5. 初期緩和 (Initial Relaxation) ==========
+# 293Kで初期化 
+velocity        simulation_atoms create 293.0 54321 mom yes rot yes
+fix             1 simulation_atoms nvt temp 293.0 293.0 0.1
+fix             2 thermostat_atoms langevin 293.0 293.0 0.1 98765
+
+# 緩和の実行 (10 ps) [cite: 94]
+timestep        0.001 # 1 fs
+run             10000
+
+unfix           1
+unfix           2
+
+# ========== 全シミュレーション過程の可視化用出力 ==========
+dump            viz_dump all custom 10000 trajectory.dump id type x y z
+
+# ========== 6. 窒素イオン注入 (Nitrogen Ion Implantation) ==========
+# 論文に記載の1.6 keVのエネルギーで窒素イオンを注入
+variable        energy_eV equal 1600.0
+variable        energy_J equal ${energy_eV}*1.60218e-19
+variable        mass_kg equal 14.007*1.66054e-27  # 窒素の質量に変更
+variable        velocity_mps equal sqrt(2*${energy_J}/${mass_kg})
+variable        velocity_Aps equal ${velocity_mps}/1.0e10
+
+# Z方向の上部からイオンを生成し、-Z方向へ発射
+fix             implant all deposit 2 1 100 12345 region box vz -${velocity_Aps} -${velocity_Aps} # 窒素(タイプ2)を注入
+
+
+# 注入の実行 (350 ps) [cite: 94]
+run             350000
+
+unfix           implant
+
+# 注入後の緩和 (150 ps) [cite: 94]
+fix             1 simulation_atoms nvt temp 293.0 293.0 0.1
+fix             2 thermostat_atoms langevin 293.0 293.0 0.1 98765
+run             150000
+unfix           1
+unfix           2
+
+# ========== 7. アニーリング (Annealing) ==========
+# 1600Kに昇温してNVセンターの形成を促進 [cite: 95]
+fix             1 simulation_atoms nvt temp 293.0 1600.0 0.5
+fix             2 thermostat_atoms langevin 293.0 1600.0 0.5 13579
+run             50000 # 50 psかけて昇温
+
+unfix           1
+unfix           2
+
+# 1600Kで保持 (7.4 ns) 
+fix             1 simulation_atoms nvt temp 1600.0 1600.0 0.1
+fix             2 thermostat_atoms langevin 1600.0 1600.0 0.1 24680
+run             7400000
+
+unfix           1
+unfix           2
+
+# ========== 8. 冷却と最終緩和 (Cooling and Final Relaxation) ==========
+# 293Kに冷却
+fix             1 simulation_atoms nvt temp 1600.0 293.0 0.5
+fix             2 thermostat_atoms langevin 1600.0 293.0 0.5 11223
+run             50000 # 50 psかけて冷却
+
+unfix           1
+unfix           2
+
+# 最終緩和
+fix             1 simulation_atoms nvt temp 293.0 293.0 0.1
+fix             2 thermostat_atoms langevin 293.0 293.0 0.1 33445
+run             100000 # 100 ps
+
+print           "Simulation finished."

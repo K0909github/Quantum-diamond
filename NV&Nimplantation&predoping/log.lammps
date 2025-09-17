@@ -1,0 +1,510 @@
+LAMMPS (7 Feb 2024 - Update 1)
+OMP_NUM_THREADS environment is not set. Defaulting to 1 thread. (src/comm.cpp:98)
+  using 1 OpenMP thread(s) per MPI task
+############################################################
+# Mini: N implantation into (undoped) diamond - short run  #
+# Target: <~ 50k steps, small cell, few ions               #
+############################################################
+
+# ---------- 0. Parameters (small & fast) ----------
+variable        a            equal 3.57
+variable        nx           equal 12
+variable        ny           equal 12
+variable        nz           equal 12
+
+variable        dt           equal 0.001        # 1 fs
+variable        seed         equal 24680
+
+variable        energy_eV    equal 1000.0       # lower to speed (1.0 keV)
+variable        n_ions       equal 5            # only a few ions
+
+# schedule (short)
+variable        nrelax1      equal 2000         # 2 ps
+variable        nimplant     equal 10000        # 10 ps
+variable        nrelax2      equal 2000         # 2 ps
+variable        nramp        equal 5000         # 5 ps
+variable        nanneal      equal 10000        # 10 ps
+variable        ncool        equal 5000         # 5 ps
+variable        nfinal       equal 5000         # 5 ps
+
+# ---------- 1. Initialization ----------
+units           metal
+dimension       3
+boundary        p p f
+atom_style      atomic
+
+## thermo outputs are defined after the box is created
+
+# ---------- 2. Create substrate (pure C) ----------
+lattice         diamond ${a}
+lattice         diamond 3.57
+Lattice spacing in x,y,z = 3.57 3.57 3.57
+region          box block 0 ${nx} 0 ${ny} 0 ${nz} units lattice
+region          box block 0 12 0 ${ny} 0 ${nz} units lattice
+region          box block 0 12 0 12 0 ${nz} units lattice
+region          box block 0 12 0 12 0 12 units lattice
+create_box      2 box                       # type 1=C, type 2=N
+Created orthogonal box = (0 0 0) to (42.84 42.84 42.84)
+  1 by 2 by 2 MPI processor grid
+create_atoms    1 box
+Created 13824 atoms
+  using lattice units in orthogonal box = (0 0 0) to (42.84 42.84 42.84)
+  create_atoms CPU = 0.002 seconds
+
+mass            1 12.011
+mass            2 14.007
+
+thermo          500
+thermo_style    custom step atoms temp pe ke etotal press
+thermo_modify   lost ignore
+
+region          thermostat_layer block INF INF INF INF 0 2 units lattice
+variable        z_mobile_hi  equal ${nz}-2
+variable        z_mobile_hi  equal 12-2
+region          newton_layer     block INF INF INF INF 2 ${z_mobile_hi} units lattice
+region          newton_layer     block INF INF INF INF 2 10 units lattice
+group           thermostat_atoms region thermostat_layer
+2592 atoms in group thermostat_atoms
+group           newton_atoms     region newton_layer
+9504 atoms in group newton_atoms
+group           simulation_atoms union newton_atoms thermostat_atoms
+11808 atoms in group simulation_atoms
+
+# fix bottom layer to prevent drift and atom loss
+velocity        thermostat_atoms set 0.0 0.0 0.0
+fix             fFIX thermostat_atoms setforce 0.0 0.0 0.0
+
+variable        zmax        equal ${nz}
+variable        zmax        equal 12
+variable        inj_lo      equal ${zmax}-0.5
+variable        inj_lo      equal 12-0.5
+variable        inj_hi      equal ${zmax}-0.1
+variable        inj_hi      equal 12-0.1
+region          inject      block INF INF INF INF ${inj_lo} ${inj_hi} units lattice
+region          inject      block INF INF INF INF 11.5 ${inj_hi} units lattice
+region          inject      block INF INF INF INF 11.5 11.9 units lattice
+
+# ---------- 3. Potential ----------
+pair_style      tersoff/zbl
+pair_coeff      * * BNC_tersoff_zbl.potential C N
+Reading tersoff/zbl potential file BNC_tersoff_zbl.potential with DATE: 2013-03-21
+neighbor        2.0 bin
+neigh_modify    delay 10 check yes
+
+# ---------- 4. Initial relaxation @293K ----------
+timestep        ${dt}
+timestep        0.001
+velocity        newton_atoms create 293.0 13579 mom yes rot yes
+fix             fNVT newton_atoms nvt temp 293.0 293.0 0.1
+fix             fLAN thermostat_atoms langevin 293.0 293.0 0.1 98765
+run             ${nrelax1}
+run             2000
+Neighbor list info ...
+  update: every = 1 steps, delay = 10 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 4.1
+  ghost atom cutoff = 4.1
+  binsize = 2.05, bins = 21 21 21
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair tersoff/zbl, perpetual
+      attributes: full, newton on
+      pair build: full/bin/atomonly
+      stencil: full/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 3.617 | 3.617 | 3.617 Mbytes
+   Step        Atoms         Temp          PotEng         KinEng         TotEng         Press     
+         0       13824   201.43088     -26946.24       359.90923     -26586.331      1404672.7    
+       500       13824   852.93327     -22421.852      1523.9896     -20897.863      1420023.9    
+      1000       13824   576.76541     -19025.922      1030.5431     -17995.379      1451031.1    
+      1500       13824   496.94304     -20455.111      887.91943     -19567.192      1439959.1    
+      2000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+Loop time of 42.0737 on 4 procs for 2000 steps with 13824 atoms
+
+Performance: 4.107 ns/day, 5.844 hours/ns, 47.536 timesteps/s, 657.132 katom-step/s
+98.2% CPU use with 4 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 32.083     | 33.653     | 35.455     |  26.7 | 79.98
+Neigh   | 0.72322    | 0.73422    | 0.73909    |   0.7 |  1.75
+Comm    | 5.4792     | 7.2827     | 8.8595     |  57.5 | 17.31
+Output  | 0.00019662 | 0.000278   | 0.00044126 |   0.0 |  0.00
+Modify  | 0.34131    | 0.34427    | 0.34817    |   0.5 |  0.82
+Other   |            | 0.05966    |            |       |  0.14
+
+Nlocal:           3456 ave        3466 max        3445 min
+Histogram: 1 0 0 0 0 2 0 0 0 1
+Nghost:        3328.25 ave        3341 max        3299 min
+Histogram: 1 0 0 0 0 0 0 0 1 2
+Neighs:              0 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+FullNghs:       162128 ave      166496 max      158288 min
+Histogram: 2 0 0 0 0 0 0 0 1 1
+
+Total # of neighbors = 648514
+Ave neighs/atom = 46.912182
+Neighbor list builds = 80
+Dangerous builds = 0
+unfix           fNVT
+unfix           fLAN
+
+dump            dtraj all custom 1000 mini_traj.dump id type x y z
+dump_modify     dtraj sort id
+
+# ---------- 5. Ion implantation (few ions) ----------
+## Redefine insertion region after initial relaxation using current box size
+variable        xlo_cur     equal xlo
+variable        xhi_cur     equal xhi
+variable        ylo_cur     equal ylo
+variable        yhi_cur     equal yhi
+variable        zlo_cur     equal zlo
+variable        zhi_cur     equal zhi
+variable        inj_hi_box  equal ${zhi_cur}-5.0    # 5 A below current top
+variable        inj_hi_box  equal 42.84-5.0    
+variable        inj_lo_box  equal ${zhi_cur}-10.0   # 10->5 A thick slab below top
+variable        inj_lo_box  equal 42.84-10.0   
+# shrink x/y bounds slightly inside the box to avoid edge-equality issues
+variable        eps         equal 0.01
+variable        xlo_in      equal ${xlo_cur}+${eps}
+variable        xlo_in      equal 0+${eps}
+variable        xlo_in      equal 0+0.01
+variable        xhi_in      equal ${xhi_cur}-${eps}
+variable        xhi_in      equal 42.84-${eps}
+variable        xhi_in      equal 42.84-0.01
+variable        ylo_in      equal ${ylo_cur}+${eps}
+variable        ylo_in      equal 0+${eps}
+variable        ylo_in      equal 0+0.01
+variable        yhi_in      equal ${yhi_cur}-${eps}
+variable        yhi_in      equal 42.84-${eps}
+variable        yhi_in      equal 42.84-0.01
+region          inject_box  block ${xlo_in} ${xhi_in} ${ylo_in} ${yhi_in} ${inj_lo_box} ${inj_hi_box} units box side in
+region          inject_box  block 0.01 ${xhi_in} ${ylo_in} ${yhi_in} ${inj_lo_box} ${inj_hi_box} units box side in
+region          inject_box  block 0.01 42.83 ${ylo_in} ${yhi_in} ${inj_lo_box} ${inj_hi_box} units box side in
+region          inject_box  block 0.01 42.83 0.01 ${yhi_in} ${inj_lo_box} ${inj_hi_box} units box side in
+region          inject_box  block 0.01 42.83 0.01 42.83 ${inj_lo_box} ${inj_hi_box} units box side in
+region          inject_box  block 0.01 42.83 0.01 42.83 32.84 ${inj_hi_box} units box side in
+region          inject_box  block 0.01 42.83 0.01 42.83 32.84 37.84 units box side in
+
+variable        energy_J     equal ${energy_eV}*1.60218e-19
+variable        energy_J     equal 1000*1.60218e-19
+variable        mass_kg      equal 14.007*1.66054e-27
+variable        v_mps        equal sqrt(2*${energy_J}/${mass_kg})
+variable        v_mps        equal sqrt(2*1.60218e-16/${mass_kg})
+variable        v_mps        equal sqrt(2*1.60218e-16/2.325918378e-26)
+variable        v_Aps        equal ${v_mps}/1.0e10
+variable        v_Aps        equal 117374.408257012/1.0e10
+
+compute_modify  thermo_temp dynamic/dof yes
+fix             implant all deposit ${n_ions} 2 100 ${seed} region inject_box near 1.0 attempt 20 vz -${v_Aps} -${v_Aps}
+fix             implant all deposit 5 2 100 ${seed} region inject_box near 1.0 attempt 20 vz -${v_Aps} -${v_Aps}
+fix             implant all deposit 5 2 100 24680 region inject_box near 1.0 attempt 20 vz -${v_Aps} -${v_Aps}
+fix             implant all deposit 5 2 100 24680 region inject_box near 1.0 attempt 20 vz -1.17374408257012e-05 -${v_Aps}
+fix             implant all deposit 5 2 100 24680 region inject_box near 1.0 attempt 20 vz -1.17374408257012e-05 -1.17374408257012e-05
+run             ${nimplant}
+run             10000
+WARNING: No fixes with time integration, atoms won't move (src/verlet.cpp:60)
+Per MPI rank memory allocation (min/avg/max) = 3.635 | 3.635 | 3.636 Mbytes
+   Step        Atoms         Temp          PotEng         KinEng         TotEng         Press     
+      2000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+WARNING: One or more particle depositions were unsuccessful (src/fix_deposit.cpp:597)
+      2500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      3000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      3500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      4000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      4500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      5000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      5500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      6000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      6500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      7000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      7500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      8000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      8500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      9000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+      9500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+     10000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+     10500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+     11000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+     11500       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+     12000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+Loop time of 228.975 on 4 procs for 10000 steps with 13824 atoms
+
+Performance: 3.773 ns/day, 6.360 hours/ns, 43.673 timesteps/s, 603.734 katom-step/s
+98.5% CPU use with 4 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 166.9      | 185.6      | 203.12     | 126.8 | 81.06
+Neigh   | 0.94408    | 0.958      | 0.97224    |   1.1 |  0.42
+Comm    | 23.912     | 41.451     | 60.182     | 268.6 | 18.10
+Output  | 0.096806   | 0.12303    | 0.15083    |   5.7 |  0.05
+Modify  | 0.22559    | 0.27707    | 0.32608    |   7.2 |  0.12
+Other   |            | 0.5623     |            |       |  0.25
+
+Nlocal:           3456 ave        3463 max        3447 min
+Histogram: 1 0 0 0 0 1 1 0 0 1
+Nghost:           3326 ave        3338 max        3296 min
+Histogram: 1 0 0 0 0 0 0 0 1 2
+Neighs:              0 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+FullNghs:       162067 ave      166271 max      158211 min
+Histogram: 2 0 0 0 0 0 0 0 1 1
+
+Total # of neighbors = 648268
+Ave neighs/atom = 46.894387
+Neighbor list builds = 100
+Dangerous builds = 0
+unfix           implant
+
+# post-implant short relax
+fix             fNVT newton_atoms nvt temp 293.0 293.0 0.1
+fix             fLAN thermostat_atoms langevin 293.0 293.0 0.1 98765
+run             ${nrelax2}
+run             2000
+Per MPI rank memory allocation (min/avg/max) = 5.203 | 5.205 | 5.206 Mbytes
+   Step        Atoms         Temp          PotEng         KinEng         TotEng         Press     
+     12000       13824   487.56279     -21454.156      871.15915     -20582.997      1444578.1    
+     12500       13824   640.30778     -20501.58       1144.0782     -19357.502      1491060.3    
+     13000       13824   576.12714     -19982.088      1029.4027     -18952.686      1489425.8    
+     13500       13823   554.66583     -19793.037      990.98468     -18802.053      1502486      
+     14000       13823   536.29741     -21110.189      958.16704     -20152.022      1473921.9    
+Loop time of 45.8541 on 4 procs for 2000 steps with 13823 atoms
+
+Performance: 3.768 ns/day, 6.369 hours/ns, 43.617 timesteps/s, 602.912 katom-step/s
+98.2% CPU use with 4 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 33.034     | 36.547     | 40.019     |  56.4 | 79.70
+Neigh   | 0.80603    | 0.80814    | 0.81259    |   0.3 |  1.76
+Comm    | 4.5422     | 8.0149     | 11.53      | 120.5 | 17.48
+Output  | 0.017592   | 0.023793   | 0.030844   |   3.2 |  0.05
+Modify  | 0.3788     | 0.38528    | 0.39155    |   0.9 |  0.84
+Other   |            | 0.07477    |            |       |  0.16
+
+Nlocal:        3455.75 ave        3476 max        3427 min
+Histogram: 1 0 0 0 0 1 0 0 1 1
+Nghost:        3332.25 ave        3370 max        3303 min
+Histogram: 1 0 0 1 1 0 0 0 0 1
+Neighs:              0 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+FullNghs:       162058 ave      167104 max      156028 min
+Histogram: 1 0 0 1 0 0 0 0 1 1
+
+Total # of neighbors = 648230
+Ave neighs/atom = 46.89503
+Neighbor list builds = 84
+Dangerous builds = 0
+unfix           fNVT
+unfix           fLAN
+
+# ---------- 6. Short anneal & cool ----------
+fix             fNVT newton_atoms nvt temp 293.0 1600.0 0.5
+fix             fLAN thermostat_atoms langevin 293.0 1600.0 0.5 13579
+run             ${nramp}
+run             5000
+Per MPI rank memory allocation (min/avg/max) = 5.204 | 5.206 | 5.208 Mbytes
+   Step        Atoms         Temp          PotEng         KinEng         TotEng         Press     
+     14000       13823   536.29741     -21110.189      958.16704     -20152.022      1473921.9    
+     14500       13816   1361.2924     -19579.719      2430.8992     -17148.82       1637539.1    
+     15000       13805   1870.9115     -17561.045      3338.2805     -14222.764      1716205.6    
+     15500       13791   2356.2286     -21140.052      4199.9713     -16940.081      1736407.2    
+     16000       13777   2650.8285     -20721.374      4720.2979     -16001.076      1776513.2    
+     16500       13753   2793.272      -20255.896      4965.2798     -15290.616      1750514.3    
+     17000       13741   2996.1388     -21709.097      5321.2455     -16387.852      1735351      
+     17500       13731   3090.2997     -21951.434      5484.484      -16466.95       1729870.8    
+     18000       13716   3154.401      -21122.565      5592.1312     -15530.434      1724042.5    
+     18500       13707   3263.6694     -22546.054      5782.0458     -16764.008      1704535.3    
+     19000       13697   3283.085      -22910.564      5812.1995     -17098.365      1676441.6    
+Loop time of 122.865 on 4 procs for 5000 steps with 13697 atoms
+
+Performance: 3.516 ns/day, 6.826 hours/ns, 40.695 timesteps/s, 557.398 katom-step/s
+98.2% CPU use with 4 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 91.292     | 97.56      | 103.5      |  59.2 | 79.40
+Neigh   | 3.3065     | 3.3776     | 3.4452     |   3.6 |  2.75
+Comm    | 14.783     | 20.798     | 27.137     | 129.9 | 16.93
+Output  | 0.048072   | 0.059684   | 0.072803   |   3.8 |  0.05
+Modify  | 0.92757    | 0.93865    | 0.94897    |   1.0 |  0.76
+Other   |            | 0.1307     |            |       |  0.11
+
+Nlocal:        3424.25 ave        3493 max        3359 min
+Histogram: 2 0 0 0 0 0 0 0 1 1
+Nghost:        3260.75 ave        3308 max        3204 min
+Histogram: 1 1 0 0 0 0 0 0 0 2
+Neighs:              0 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+FullNghs:       159603 ave      162702 max      157214 min
+Histogram: 2 0 0 0 0 0 1 0 0 1
+
+Total # of neighbors = 638412
+Ave neighs/atom = 46.609623
+Neighbor list builds = 349
+Dangerous builds = 4
+unfix           fNVT
+unfix           fLAN
+
+fix             fNVT newton_atoms nvt temp 1600.0 1600.0 0.1
+fix             fLAN thermostat_atoms langevin 1600.0 1600.0 0.1 24680
+run             ${nanneal}
+run             10000
+Per MPI rank memory allocation (min/avg/max) = 5.21 | 5.214 | 5.219 Mbytes
+   Step        Atoms         Temp          PotEng         KinEng         TotEng         Press     
+     19000       13697   3283.085      -22910.564      5812.1995     -17098.365      1676441.6    
+     19500       13692   2492.9406     -26738.939      4411.7586     -22327.181      1595756.3    
+     20000       13687   2173.6784     -28198.801      3845.3553     -24353.446      1597527.3    
+     20500       13684   2139.4987     -28759.359      3784.0599     -24975.299      1589459.6    
+     21000       13683   2131.4191     -29232.488      3769.4941     -25462.994      1582946.9    
+     21500       13681   2118.128      -28946.993      3745.4408     -25201.552      1602083.1    
+     22000       13679   2051.3203     -29006.071      3626.7759     -25379.295      1580665.4    
+     22500       13674   2010.2841     -29712.443      3552.9238     -26159.519      1577553.2    
+     23000       13671   2013.0621     -29645.41       3557.053      -26088.357      1577190      
+     23500       13668   1971.0126     -29820.021      3481.9878     -26338.033      1577803      
+     24000       13668   2013.4156     -30220.82       3556.8969     -26663.923      1583884.4    
+     24500       13667   2000.9196     -26964.273      3534.5627     -23429.71       1620658.9    
+     25000       13666   1907.9126     -29028.977      3370.0222     -25658.954      1580009.6    
+     25500       13663   1902.7493     -29552.201      3360.1641     -26192.037      1604739      
+     26000       13662   1910.0961     -30205.865      3372.8913     -26832.973      1579397.2    
+     26500       13661   1872.8079     -30510.899      3306.8049     -27204.095      1564257.9    
+     27000       13661   1907.9478     -30534.51       3368.8512     -27165.658      1574420.2    
+     27500       13659   1868.3417     -22832.755      3298.4359     -19534.319      1639895      
+     28000       13658   1835.6847     -29574.264      3240.5449     -26333.719      1580700.8    
+     28500       13656   1842.7483     -30189.851      3252.5379     -26937.313      1581655.4    
+     29000       13655   1815.5988     -29198.351      3204.383      -25993.968      1584851.7    
+Loop time of 212.504 on 4 procs for 10000 steps with 13655 atoms
+
+Performance: 4.066 ns/day, 5.903 hours/ns, 47.058 timesteps/s, 642.578 katom-step/s
+97.8% CPU use with 4 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 160.9      | 171.57     | 181.4      |  68.0 | 80.74
+Neigh   | 5.0513     | 5.1733     | 5.2837     |   3.8 |  2.43
+Comm    | 23.391     | 33.334     | 44.121     | 155.7 | 15.69
+Output  | 0.12583    | 0.14964    | 0.17561    |   4.8 |  0.07
+Modify  | 1.9164     | 1.9457     | 1.9663     |   1.4 |  0.92
+Other   |            | 0.3279     |            |       |  0.15
+
+Nlocal:        3413.75 ave        3491 max        3335 min
+Histogram: 1 1 0 0 0 0 0 0 0 2
+Nghost:         3255.5 ave        3316 max        3193 min
+Histogram: 1 1 0 0 0 0 0 0 1 1
+Neighs:              0 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+FullNghs:       157598 ave      161895 max      153489 min
+Histogram: 1 0 1 0 0 0 0 1 0 1
+
+Total # of neighbors = 630390
+Ave neighs/atom = 46.165507
+Neighbor list builds = 534
+Dangerous builds = 7
+unfix           fNVT
+unfix           fLAN
+
+fix             fNVT newton_atoms nvt temp 1600.0 293.0 0.5
+fix             fLAN thermostat_atoms langevin 1600.0 293.0 0.5 11223
+run             ${ncool}
+run             5000
+Per MPI rank memory allocation (min/avg/max) = 5.211 | 5.215 | 5.221 Mbytes
+   Step        Atoms         Temp          PotEng         KinEng         TotEng         Press     
+     29000       13655   1815.5988     -29198.351      3204.383      -25993.968      1584851.7    
+     29500       13652   3055.6403     -24672.75       5391.7698     -19280.98       1656797.5    
+     30000       13647   3404.2413     -22629.375      6004.6866     -16624.688      1642554.9    
+     30500       13642   3358.2717     -22613.375      5921.4311     -16691.944      1642399.3    
+     31000       13636   3252.0121     -23834.52       5731.5481     -18102.972      1624966.6    
+     31500       13632   3061.5814     -24442.207      5394.3382     -19047.869      1625055.6    
+     32000       13631   2927.1414     -26219.939      5157.0838     -21062.856      1604281.2    
+     32500       13630   2777.176      -26951.502      4892.5136     -22058.988      1592929.6    
+     33000       13629   2585.5101     -27661.565      4554.524      -23107.041      1589645.8    
+     33500       13629   2498.5737     -28267.711      4401.3805     -23866.33       1575903.3    
+     34000       13627   2286.3332     -29392.156      4026.9158     -25365.241      1558800.6    
+Loop time of 114.955 on 4 procs for 5000 steps with 13627 atoms
+
+Performance: 3.758 ns/day, 6.386 hours/ns, 43.495 timesteps/s, 592.711 katom-step/s
+97.9% CPU use with 4 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 91.658     | 93.728     | 95.321     |  16.7 | 81.53
+Neigh   | 2.8768     | 2.911      | 2.9567     |   2.0 |  2.53
+Comm    | 15.574     | 17.211     | 19.319     |  39.8 | 14.97
+Output  | 0.047747   | 0.059893   | 0.072308   |   3.7 |  0.05
+Modify  | 0.87595    | 0.89086    | 0.91033    |   1.6 |  0.77
+Other   |            | 0.1548     |            |       |  0.13
+
+Nlocal:        3406.75 ave        3472 max        3335 min
+Histogram: 1 1 0 0 0 0 0 0 0 2
+Nghost:        3261.75 ave        3354 max        3194 min
+Histogram: 2 0 0 0 0 0 1 0 0 1
+Neighs:              0 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+FullNghs:       157075 ave      160503 max      153424 min
+Histogram: 1 1 0 0 0 0 0 0 1 1
+
+Total # of neighbors = 628300
+Ave neighs/atom = 46.106993
+Neighbor list builds = 310
+Dangerous builds = 3
+unfix           fNVT
+unfix           fLAN
+
+fix             fNVT newton_atoms nvt temp 293.0 293.0 0.1
+fix             fLAN thermostat_atoms langevin 293.0 293.0 0.1 33445
+run             ${nfinal}
+run             5000
+Per MPI rank memory allocation (min/avg/max) = 5.214 | 5.218 | 5.223 Mbytes
+   Step        Atoms         Temp          PotEng         KinEng         TotEng         Press     
+     34000       13626   2286.4881     -29394.536      4026.893      -25367.643      1558426.2    
+     34500       13625   737.33755     -33079.476      1298.4811     -31780.994      1255865      
+     35000       13625   604.65617     -33433.374      1064.8238     -32368.55       1255040.4    
+     35500       13624   598.37301     -32899.535      1053.6816     -31845.853      1284447.8    
+     36000       13624   631.73127     -33743.64       1112.4225     -32631.218      1304034.8    
+     36500       13624   614.84585     -33666.908      1082.6888     -32584.219      1312744.3    
+     37000       13624   589.8438      -33989.769      1038.6624     -32951.107      1320916.5    
+     37500       13624   601.56906     -34010.96       1059.3096     -32951.651      1331771.3    
+     38000       13624   606.55461     -33222.006      1068.0887     -32153.918      1347343.6    
+     38500       13624   596.96288     -34184.733      1051.1985     -33133.535      1345348.1    
+     39000       13624   579.6438      -33635.551      1020.7011     -32614.85       1339525.1    
+Loop time of 89.5422 on 4 procs for 5000 steps with 13624 atoms
+
+Performance: 4.825 ns/day, 4.975 hours/ns, 55.840 timesteps/s, 760.759 katom-step/s
+97.7% CPU use with 4 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 70.979     | 73.476     | 75.588     |  23.0 | 82.06
+Neigh   | 0.9256     | 0.94184    | 0.9766     |   2.1 |  1.05
+Comm    | 11.921     | 14.039     | 16.571     |  53.2 | 15.68
+Output  | 0.048016   | 0.060287   | 0.072661   |   3.7 |  0.07
+Modify  | 0.82716    | 0.84407    | 0.86206    |   1.7 |  0.94
+Other   |            | 0.1811     |            |       |  0.20
+
+Nlocal:           3406 ave        3490 max        3316 min
+Histogram: 2 0 0 0 0 0 0 0 0 2
+Nghost:         3258.5 ave        3315 max        3192 min
+Histogram: 1 0 1 0 0 0 0 0 0 2
+Neighs:              0 ave           0 max           0 min
+Histogram: 4 0 0 0 0 0 0 0 0 0
+FullNghs:       157010 ave      161559 max      152129 min
+Histogram: 1 1 0 0 0 0 0 0 0 2
+
+Total # of neighbors = 628038
+Ave neighs/atom = 46.097915
+Neighbor list builds = 104
+Dangerous builds = 0
+unfix           fNVT
+unfix           fLAN
+
+print           "Mini simulation finished."
+Mini simulation finished.
+
+Total wall time: 0:14:17
