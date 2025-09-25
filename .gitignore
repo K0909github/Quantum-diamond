@@ -4,6 +4,7 @@
 *.dump
 log.lammps
 *.ovito
+*.data
 
 # Python cache (if any)
 __pycache__/
