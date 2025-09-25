@@ -1,3 +1,17 @@
+# Ignore large simulation artifacts and transient files
+
+# LAMMPS / simulation outputs
+*.dump
+log.lammps
+*.ovito
+
+# Python cache (if any)
+__pycache__/
+*.pyc
+
+# OS metadata
+.DS_Store
+Thumbs.db
 # LAMMPS output files
 
 
