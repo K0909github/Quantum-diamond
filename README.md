@@ -39,6 +39,8 @@ cd "si"
 mpirun -np 4 lmp -in in.silicon_substrate2
 # もしくは
 mpirun -np 4 lmp -in in.silicon_substrate3
+# もしくは高性能PCの場合
+mpirun -np 24 --use-hwthread-cpus lmp -in in.silicon
 ```
 
 ダイヤモンド基板（例）:
