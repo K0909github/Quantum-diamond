@@ -90,6 +90,7 @@ group           fixed_atoms union side2 side3 side4 side5 side6
 velocity        fixed_atoms set 0.0 0.0 0.0
 # 'Si_sub'グループ(基板原子)に、温度300Kに相当する初期速度を与えます。
 # '12345'は乱数シード、'dist gaussian'は速度がガウス分布に従うことを意味します。
+#  "momentum yes" の略で、指定した原子グループの全体の並進運動量 (linear momentum) をゼロにする
 velocity        Si_sub create 300 12345 mom yes dist gaussian
 
 # 原子間に働く力を計算するためのポテンシャルの種類として'sw'(Stillinger-Weber)を選択します。
