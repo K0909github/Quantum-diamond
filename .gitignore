@@ -17,3 +17,9 @@ Thumbs.db
 
 
 # OVITO session files
+
+# Large XYZ trajectory/config files (often multi-GB)
+*.xyz
+
+# Windows alternate data stream exports (OneDrive/WSL)
+*:Zone.Identifier
