@@ -1,0 +1,51 @@
+#2test_Si3N4_16-16-12anneal.txt
+
+units           metal
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+#Newton's third law
+newton on
+
+#setting_simulation_box
+region          mybox0 prism 0.0 124.3136 0.0 107.6587356359 0.0 67.5816 -62.1568 0.0 0.0 units box
+create_box      2 mybox0 #2types atom
+
+# Neighbor list settings 
+neighbor        2.0 bin 
+neigh_modify    every 1 delay 0 check yes
+
+read_data Si3N4_16-16-12 add append
+
+pair_style tersoff
+pair_coeff * * Si3N4.tersoff Si N 
+
+
+group           Si type 1
+group           N type 2
+group           Si3N4 union Si N
+
+
+velocity        Si3N4 create 300 12345 mom yes dist gaussian
+
+write_data      2test_Si3N4_16-16-12.data
+
+timestep        0.001 #ps
+
+thermo          1000
+thermo_style    custom step time ke pe etotal temp
+
+dump            anneal all custom 100 2test_Si3N4_16-16-12_1000temp_annealing_process.dump id type x y z
+
+fix             aneal Si3N4 nvt temp 300.0 1000.0 0.1
+run             30000
+
+unfix           aneal
+
+fix             cool Si3N4 nvt temp 1000.0 300.0 0.1
+run             30000
+
+write_data      1000K_annealed_2test_Si3N4_16-16-12.data
+
+undump          anneal

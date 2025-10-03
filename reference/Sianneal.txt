@@ -1,0 +1,76 @@
+#Sianneal.txt
+
+units           metal
+dimension       3
+boundary        p p p
+atom_style      atomic
+
+#Newton's third law
+newton on
+
+# Neighbor list settings 
+neighbor        2.0 bin 
+neigh_modify    every 1 delay 0 check yes
+
+region          mybox0 block -250 250 -250 250 -250 250 units box
+create_box      2 mybox0 #1type atom
+
+lattice         diamond 5.431
+mass            1 28.085
+mass            2 28.085    
+
+region          mybox1 block -160.465 160.465 -160.465 160.465 -54.31 54.31 units box
+create_atoms    1 region mybox1
+mass            1 28.085
+group           Si_sub type 1
+
+region          wall_2 block -172.465 -160.47 -160.465 160.465 -54.31 54.31 units box
+create_atoms    2 region wall_2
+group           side2 type 2
+
+region          wall_3 block 160.47 172.465 -160.465 160.47 -54.31 54.31 units box
+create_atoms    2 region wall_3
+group           side3 type 2
+
+region          wall_4 block -172.465 172.465 -172.465 -160.47 -54.31 54.31 units box
+create_atoms    2 region wall_4
+group           side4 type 2
+
+region          wall_5 block -172.465 172.465 160.47 172.465 -54.31 54.31 units box
+create_atoms    2 region wall_5
+group           side5 type 2
+
+region          wall_6 block -172.465 172.465 -172.465 172.465 -59.31 -54.4 units box
+create_atoms    2 region wall_6
+group           side6 type 2
+
+group           fixed_atoms union side2 side3 side4 side5 side6
+
+velocity        fixed_atoms set 0.0 0.0 0.0
+velocity        Si_sub create 300 12345 mom yes dist gaussian
+
+pair_style      sw
+pair_coeff      * * Si.sw Si Si
+
+write_data      silicon_320Abefore.data
+
+timestep        0.001 #ps
+
+thermo          100
+thermo_style    custom step time ke pe etotal temp
+
+dump            anneal all custom 500 annealing_process.dump id type x y z
+
+fix             hold fixed_atoms setforce 0.0 0.0 0.0
+
+fix             aneal Si_sub nvt temp 300.0 1000.0 0.1
+run             30000
+
+unfix           aneal
+
+fix             cool Si_sub nvt temp 1000.0 300.0 0.1
+run             30000
+
+write_data      1000K_annealed_silicon_320A.data
+
+undump          anneal

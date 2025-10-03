@@ -1,0 +1,47 @@
+units   metal
+boundary p  p   p
+atom_style  charge
+
+lattice diamond 5.3
+region  sim_box  block 0 4 0 4 0 6
+region  crystal_box  block 0 4 0 4 0 2
+create_box  1  sim_box
+create_atoms  1 region  sim_box
+
+group  gcrystal  region  crystal_box
+group  gam subtract all  gcrystal
+
+mass    1 28.0855
+pair_style   tersoff/mod
+pair_coeff  * *  Si.tersoff.mod  Si
+
+shell  mkdir   cfg
+timestep  0.0005
+dump  d1 all  cfg   1000  cfg/melt.crystal.*.cfg  mass type  xs   ys   zs   id
+dump_modify  d1 element Si
+
+thermo  100
+thermo_style  custom step temp  etotal   pe   ke   lx  ly   lz   vol   press 
+
+fix f1 all box/relax  iso  0.0  vmax  0.001
+minimize 1.0e-15  1.0e-15  1000 100000
+unfix f1
+
+variable  randseed  equal 10002
+velocity gam create 6000.0 ${randseed}  dist   gaussian  mom yes
+
+fix fc  gcrystal   setforce  0.0 0.0 0.0
+fix f1 gam  nvt  temp 3000 3000 0.05
+run 1000
+unfix f1
+fix f1 gam  nvt  temp 3000 1500 0.05
+run 3000
+unfix f1
+unfix fc
+
+write_restart   cfg/dump01
+
+velocity all create 2200.0 ${randseed}  dist   gaussian  mom yes
+fix f1 all  nph   iso  0.0 0.0 0.5
+run 1000000
+unfix f1

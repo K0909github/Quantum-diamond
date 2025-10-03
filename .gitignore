@@ -23,3 +23,11 @@ Thumbs.db
 
 # Windows alternate data stream exports (OneDrive/WSL)
 *:Zone.Identifier
+
+# Project local folders to ignore
+安水/
+# Ignore all files under silicon_anneal_to2000K(3) by default, but allow specific tracked files
+silicon_anneal_to2000K(3)/*
+# Allowlist specific files within silicon_anneal_to2000K(3)/
+!silicon_anneal_to2000K(3)/explain.txt
+!silicon_anneal_to2000K(3)/in.Si_melt_slide.lmp
