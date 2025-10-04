@@ -1,0 +1,43 @@
+atom_style      atomic
+units           metal
+boundary        p p p
+
+lattice         diamond 5.4
+region          region1 block 0 3 0 3 0 3 units lattice
+create_box      1 region1
+
+create_atoms    1 box
+
+pair_style      tersoff
+pair_coeff      * * Si.tersoff Si
+mass            1 28.0855
+
+thermo_style    custom step etotal temp lx vol press
+thermo          10
+
+fix             f1 all box/relax iso 0.0
+minimize        1.0e-10 0.0 1000 100000
+unfix           f1
+
+reset_timestep  0
+timestep        0.001
+
+dump            d1 all cfg 10 cfg/run.*.cfg mass type xs ys zs id type
+dump_modify     d1 element Si
+
+variable        energy equal etotal
+variable        temperature equal temp
+fix             fout1 all ave/time 1 100 100 v_energy v_temperature file out_energy.txt
+
+velocity        all create 2500 12345 dist gaussian
+
+fix             f1 all nvt temp 2500.0 2500.0 0.1
+run             10000
+unfix           f1
+
+comm_modify     cutoff 8.01
+compute         distribution all rdf 50 1 1 cutoff 6.0
+fix             fout2 all ave/time 10 100 1000 c_distribution[*] file out_rdf.txt mode vector
+
+fix             f1 all nvt temp 2500.0 2500.0 0.1
+run             1000

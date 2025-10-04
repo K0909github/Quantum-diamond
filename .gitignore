@@ -20,6 +20,7 @@ Thumbs.db
 
 # Large XYZ trajectory/config files (often multi-GB)
 *.xyz
+*.cfg
 
 # Windows alternate data stream exports (OneDrive/WSL)
 *:Zone.Identifier

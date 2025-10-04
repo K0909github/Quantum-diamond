@@ -1,0 +1,139 @@
+スクリプトの全体構成と目的
+
+記事の目的は、「シリコン結晶を加熱して溶融させ、その過程を分子動力学 (MD) で観察する」ことです。 
+
+
+最終的には、温度、エネルギー、構造情報（原子配置や動径分布関数）を出力して、溶ける過程を可視化・解析できるようにしています。 
+
+
+主要なセクションとコマンドの意味
+
+以下はスクリプトの主要な部分と、それぞれの意味・役割です（記事から抜粋して解説）：
+
+atom_style      atomic
+units           metal
+boundary        p p p
+
+
+atom_style atomic：単純な原子モデル（電荷なし、結合情報なし）を使う。
+
+units metal：金属系単位系。エネルギーは eV、距離は Å、時間は ps（もしくは fs）など。
+
+boundary p p p：周期境界条件（Periodic）を x, y, z 方向すべてに適用。
+
+lattice         diamond 5.4
+region          region1 block 0 3 0 3 0 3 units lattice
+create_box      1 region1
+create_atoms    1 box
+
+
+lattice diamond 5.4：ダイヤモンド構造で格子定数 5.4 Å の格子を定義（Si の結晶構造）。
+
+region region1 block 0 3 0 3 0 3 units lattice：格子単位でブロック領域を定義。
+
+create_box 1 region1：原子系のボックスを作成（1 種類の原子）。
+
+create_atoms 1 box：その領域全体に原子を配置。
+
+pair_style      tersoff
+pair_coeff      * * Si.tersoff Si
+mass            1 28.0855
+
+
+pair_style tersoff：Tersoff ポテンシャルを使う（結合性物質向けポテンシャル）。
+
+pair_coeff * * Si.tersoff Si：全原子ペアに対し Si 用の Tersoff パラメータを使う。
+
+mass 1 28.0855：原子質量を 28.0855 amu（シリコン）に設定。
+
+thermo_style    custom step etotal temp lx vol press
+thermo          10
+
+
+thermo_style custom …：出力ログ（thermo）の項目を指定（ステップ、全エネルギー、温度、箱長さ、体積、圧力など）。
+
+thermo 10：10 ステップごとに上述の熱力学量をログ出力。
+
+fix             f1 all box/relax iso 0.0
+minimize        1.0e-10 0.0 1000 100000
+unfix f1
+
+
+fix f1 all box/relax iso 0.0：箱（セルの体積／形状）をアイソトロピックに緩和可能にする制御。
+
+minimize …：エネルギー最小化（静的緩和）を行い、初期構造を安定化。
+
+unfix f1：緩和用 fix を解除。
+
+reset_timestep  0
+timestep        0.001
+
+
+reset_timestep 0：時刻ステップを 0 にリセット。
+
+timestep 0.001：タイムステップを 0.001（この単位系では “ps” か “ps” の一部か、metal 単位に対応する時間単位）に設定。
+
+dump            d1 all cfg 10 cfg/run.*.cfg mass type xs ys zs id type
+dump_modify     d1 element Si
+
+
+dump d1 all cfg 10 …：原子位置情報を cfg 形式で 10 ステップごとに出力。
+
+dump_modify d1 element Si：出力時に原子要素ラベル “Si” を付加。
+
+variable        energy equal etotal
+variable        temperature equal temp
+fix             fout1 all ave/time 1 100 100 v_energy v_temperature file out_energy.txt
+
+
+variable energy equal etotal：変数 energy に現在の全エネルギーを代入。
+
+variable temperature equal temp：変数 temperature に現在の温度を代入。
+
+fix fout1 all ave/time 1 100 100 v_energy v_temperature file out_energy.txt：一定時間ごとに energy と temperature の平均値を計算して、 out_energy.txt に出力。
+
+velocity        all create 2500 12345 dist gaussian
+
+
+velocity all create 2500 12345 dist gaussian：系全体に初速度を付与。温度 2500 K 相当、乱数シード 12345、ガウス分布で速度を分布。
+
+fix             f1 all nvt temp 2500.0 2500.0 0.1
+run             10000
+unfix f1
+
+
+fix f1 all nvt temp 2500.0 2500.0 0.1：NVT アンサンブル（定温制御）を 2500 K にセット。
+
+run 10000：10,000 ステップ MD 実行。
+
+unfix f1：NVT 制御を解除。
+
+comm_modify     cutoff 8.01
+compute         distribution all rdf 50 1 1 cutoff 6.0
+fix             fout2 all ave/time 10 100 1000 c_distribution[*] file out_rdf.txt mode vector
+fix             f1 all nvt temp 2500.0 2500.0 0.1
+run             1000
+
+
+comm_modify cutoff 8.01：近接リスト更新などに使うカットオフ距離を設定。
+
+compute distribution all rdf 50 1 1 cutoff 6.0：動径分布関数 (RDF) を計算（50 ビン、1–1 原子タイプ間、カットオフ 6.0 Å）。
+
+fix fout2 all ave/time …：その RDF を平均化して out_rdf.txt に出力（モード vector で複数ビンの配列を扱う）。
+
+再び NVT を設定して 1,000 ステップ走らせる。
+
+意図と活用
+
+このコードは 加熱によりシリコンを溶かすシミュレーション の最も基本形です。記事ではこのスクリプトを走らせて得られる出力（エネルギー変動、温度の安定化、動径分布関数、構造の可視化）を通じて「溶融 (melting)」が起こったことを確認しています。 
+Qiita
+
+特に注目すべき点：
+
+初期の緩和 (minimize) を行って構造を安定化させてから MD を始めている。
+
+NVT 制御 を使って温度を一定に保ちつつ、原子運動を追っている。
+
+出力ファイル（out_energy.txt, out_rdf.txt, cfg/run.*.cfg）を後でプロット・可視化して、エネルギーや構造の変化を読み取る。
+
+溶融過程では、動径分布関数 (RDF) がピークの減衰・広がりを見せたり、原子配置が乱れてくる様子が観察できる。
