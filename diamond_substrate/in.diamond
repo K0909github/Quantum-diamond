@@ -1,98 +1,73 @@
 # ------------------------ INITIALIZATION (初期設定) ------------------------
-# シミュレーションで使用する単位系を'metal'に設定します。
-# これにより、距離はオングストローム(Å)、時間はピコ秒(ps)、エネルギーは電子ボルト(eV)になります。
 units           metal
-
-# シミュレーション空間を3次元に設定します。
 dimension       3
-
-# シミュレーションボックスの境界条件を x, y, z 全てで周期的(periodic)に設定します。
-# これにより、箱の端から出た原子は反対側から入ってくるようになり、無限に広がる結晶を模倣できます。
 boundary        p p p
-
-# シミュレーションで扱う原子の基本的な情報スタイルを定義します。
-# 'atomic'は最もシンプルなスタイルで、各原子はID、種類、座標などの情報のみを持ちます。
 atom_style      atomic
+newton on
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
 
 
 # ------------------------ ATOM DEFINITION (原子とシミュレーション空間の定義) ------------------------
-# 'lat_const'という名前の変数を定義し、ダイヤモンドの格子定数である3.57(Å)を代入します。
-# 後からこの変数名を呼び出すことで、3.57という数値を使えます。
-variable        lat_const equal 3.57
+region          mybox0 block -250 250 -250 250 -250 250 units box
+create_box      2 mybox0
 
-# 原子を配置するための設計図となる結晶格子を定義します。
-# 格子定数が先ほど定義した変数'lat_const'である、ダイヤモンド(diamond)構造を指定します。
-lattice         diamond ${lat_const}
+# ★★★ 変更点: 格子定数をSi(5.431)からDiamond(3.567)に変更 ★★★
+lattice         diamond 3.567
 
-# 'box'という名前の幾何学的な領域(region)を定義します。
-# 'block'は直方体領域を意味し、続く'0 10 0 10 0 10'は、x, y, z各方向の範囲を「格子単位」で指定します。
-# つまり、latticeで定義した単位格子を10x10x10個並べた大きさの領域を確保します。
-region          box block 0 10 0 10 0 10
-
-# regionで定義した大きさのシミュレーションボックスを実際に作成します。
-# '1'は、この箱の中に作成する原子の種類が1種類であることを意味します。
-create_box      1 box
-
-# create_boxで作成した箱の中を、latticeで定義した設計図に従って原子で満たします。
-# '1'は、作成する原子の種類番号(type)が1であることを示します。
-create_atoms    1 box
-
-# 種類番号1の原子の質量を設定します。12.011は炭素(C)の原子量です。
+# ★★★ 変更点: 質量をSi(28.085)からCarbon(12.011)に変更 ★★★
 mass            1 12.011
+mass            2 12.011
 
 
-# ------------------------ FORCE FIELDS (原子間ポテンシャルの設定) ------------------------
-# 原子間に働く力を計算するためのポテンシャルの種類として'tersoff'を選択します。
-# Tersoffポテンシャルは、ダイヤモンドのような共有結合性材料で広く使われます。
+# ------------------------ GEOMETRY & GROUPING (原子配置とグループ化) ------------------------
+# --- ダイヤモンド基板の作成 ---
+region          mybox1 block -160.465 160.465 -160.465 160.465 -54.31 54.31 units box
+create_atoms    1 region mybox1
+group           C_sub type 1
+
+# --- 周囲を囲む壁の作成 ---
+region          wall_2 block -172.465 -160.47 -160.465 160.465 -54.31 54.31 units box
+create_atoms    2 region wall_2
+group           side2 type 2
+
+region          wall_3 block 160.47 172.465 -160.465 160.47 -54.31 54.31 units box
+create_atoms    2 region wall_3
+group           side3 type 2
+
+region          wall_4 block -172.465 172.465 -172.465 -160.47 -54.31 54.31 units box
+create_atoms    2 region wall_4
+group           side4 type 2
+
+region          wall_5 block -172.465 172.465 160.47 172.465 -54.31 54.31 units box
+create_atoms    2 region wall_5
+group           side5 type 2
+
+region          wall_6 block -172.465 172.465 -172.465 172.465 -59.31 -54.4 units box
+create_atoms    2 region wall_6
+group           side6 type 2
+
+group           fixed_atoms union side2 side3 side4 side5 side6
+
+
+# ------------------------ INITIAL CONDITIONS & POTENTIAL (初期条件とポテンシャルの設定) ------------------------
+velocity        fixed_atoms set 0.0 0.0 0.0
+velocity        C_sub create 300 12345 mom yes dist gaussian
+
+# ★★★ 変更点: ポテンシャルをSi(sw)からCarbon(tersoff)に変更 ★★★
+# 注意: このスクリプトと同じフォルダに BNC.tersoff ファイルを置いてください
 pair_style      tersoff
-
-# 具体的なポテンシャルパラメータをファイルから読み込みます。
-# '* *'は「全ての原子タイプの組み合わせ」に適用するという意味です。
-# 'C.tersoff'というファイルに書かれた'C'という元素のパラメータを使って力を計算するよう指示しています。
-pair_coeff      * * C.tersoff C
+pair_coeff      * * BNC.tersoff C C
 
 
-# ------------------------ SETTINGS (各種設定) ------------------------
-# 熱力学的な情報(温度、エネルギーなど)を何ステップおきに出力するかを設定します。
-# '10'なので、10ステップごとに情報を画面とログファイルに出力します。
-thermo          10
+# ------------------------ DATA FILE OUTPUT (データファイルの書き出し) ------------------------
+# 初期構造をファイルに書き出して終了
+write_data      diamond_with_walls.data
 
-# thermoで出力する情報の種類をカスタマイズします。
-# step(ステップ数), temp(温度), pe(ポテンシャルエネルギー), etotal(全エネルギー), press(圧力)を出力します。
-thermo_style    custom step temp pe etotal press
-
-
-# ------------------------ SIMULATION RUN (シミュレーションの実行) ------------------------
-# 'fix'はシミュレーション中に特定の処理を行うコマンドです。ここでは原子が安定するように箱のサイズを調整します。
-# ID '1'を、'all'(全ての)原子グループに適用します。
-# 'box/relax'は箱のサイズを緩和させるスタイルです。
-# 'iso 0.0'は、箱の形を保ったまま(iso=等方的)、目標圧力0.0 Barになるように調整することを意味します。
-# 'vmax 0.001'は、1ステップあたりの体積変化率の上限で、計算を安定させます。
-fix             1 all box/relax iso 0.0 vmax 0.001
-
-# エネルギー最小化計算を実行し、原子配置と箱の大きさを最も安定な状態にします。
-# この計算は、2つの条件を「両方とも」満たした場合に正常終了します。
-# 1.0e-5: エネルギー変化率の許容誤差。系のエネルギーがほとんど変化しなくなったらクリア。
-# 1.0e-7: 全原子にかかる力の合計の大きさの許容誤差。原子を動かす力がほぼゼロになったらクリア。
-# 1000: 最大反復回数。この回数に達しても条件を満たさない場合は計算を打ち切ります。
-# 10000: エネルギー/力の最大評価回数。同様に計算の打ち切り条件です。
-minimize        1.0e-5 1.0e-7 1000 10000
-
-# 原子座標などのスナップショットをファイルに出力するコマンドです。
-# dump ID '1'を、'all'(全ての)原子に適用します。
-# 'custom'は、指定した情報をテキスト形式で出力するスタイルです。
-# '1'は、1ステップごとに出力することを意味します。
-# 'dump.diamond'は出力ファイル名です。
-# 'id type x y z'は、ファイルに出力する情報（原子ID, 種類番号, x, y, z座標）を指定します。
-dump            1 all custom 1 dump.diamond id type x y z
-
-# 先ほど設定したdumpコマンド(IDが1のもの)を一部変更します。
-# 'element C'は、原子の種類番号(type)が1のものを、元素名'C'としてファイルに書き出すように設定します。
-# これにより、OVITOなどの可視化ソフトが原子を自動で炭素として認識してくれます。
-dump_modify     1 element C
-
-# シミュレーションを実行します。
-# ステップ数に'0'を指定しているため、時間発展の計算（分子動力学計算）は行われません。
-# しかし、このコマンドが実行されることで、これ以前に設定されたminimizeやdumpなどのコマンドが実行され、
-# エネルギー最小化後の原子配置が'dump.diamond'ファイルに出力される仕組みです。
-run             0
+# --- ここからdumpとrunを追加 ---
+timestep        0.001
+thermo          100
+# 100ステップごとに全原子のID,種類,座標をdump.diamondファイルに出力
+dump            1 all custom 100 dump.diamond id type x y z
+# シミュレーションを実行
+run             100
