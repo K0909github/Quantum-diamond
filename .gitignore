@@ -15,6 +15,9 @@ __pycache__/
 Thumbs.db
 # LAMMPS output files
 
+# LAMMPS diamond dump series (e.g., diamond_substrate/dump.diamond, dump.diamond.1, dump.diamond.gz)
+dump.diamond*
+
 
 # OVITO session files
 
