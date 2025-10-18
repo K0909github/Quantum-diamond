@@ -26,8 +26,13 @@ pair_style      hybrid/overlay tersoff zbl 0.5 2.0
 # 注意: このスクリプトと同じフォルダに "C.tersoff" と "CN.zbl" が必要です
 # C-C間の相互作用はTersoff (タイプ1と2は両方とも炭素)
 pair_coeff      * * tersoff BNC.tersoff C C NULL
+
 # C-N間の相互作用はZBL (タイプ1,2の炭素とタイプ3の窒素の間)
-pair_coeff      * 3 zbl CN.zbl C N
+# 炭素(type 1)と窒素(type 3)の相互作用をZBLで定義
+pair_coeff      1 3 zbl 6 7
+# 炭素(type 2)と窒素(type 3)の相互作用も同様にZBLで定義
+pair_coeff      2 3 zbl 6 7
+pair_coeff      3 3 zbl 7 7
 
 neighbor        2.0 bin
 neigh_modify    every 1 delay 0 check yes

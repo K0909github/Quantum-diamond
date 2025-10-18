@@ -18,6 +18,9 @@ Thumbs.db
 # LAMMPS diamond dump series (e.g., diamond_substrate/dump.diamond, dump.diamond.1, dump.diamond.gz)
 dump.diamond*
 
+# Specific NV implantation trajectory dump
+dump.nv_implant_original.lammpstrj
+
 
 # OVITO session files
 
