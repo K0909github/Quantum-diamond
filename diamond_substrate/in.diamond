@@ -57,7 +57,7 @@ velocity        C_sub create 300 12345 mom yes dist gaussian
 # ★★★ 変更点: ポテンシャルをSi(sw)からCarbon(tersoff)に変更 ★★★
 # 注意: このスクリプトと同じフォルダに BNC.tersoff ファイルを置いてください
 pair_style      tersoff
-pair_coeff      * * BNC.tersoff C C
+pair_coeff      * * SiC.tersoff.zbl C C
 
 
 # ------------------------ DATA FILE OUTPUT (データファイルの書き出し) ------------------------

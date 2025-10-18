@@ -1,109 +1,122 @@
-# ------------------------ INITIALIZATION (初期設定) ------------------------
-units           metal
-dimension       3
-# 境界条件: イオンが入射するためz方向は固定(f)、x,yは周期的(p)に変更
-boundary        p p f
-atom_style      atomic
+# ----------------------------------------------------------------------------------
+# --- シミュレーション概要 ---
+# ダイヤモンド(C)基板に対し、窒素(N)原子クラスターを照射するシミュレーション。
+# p p p 境界条件を使用します。
+# ----------------------------------------------------------------------------------
+
+# ------------------------ 1. 初期設定 (Initialization) ------------------------
+# 作用・反作用の法則（ニュートンの第三法則）を計算に適用します。
 newton          on
 
-# ------------------------ ATOM & BOX DEFINITION (原子とシミュレーション空間の定義) ------------------------
-# 元のスクリプトの空間定義を維持
-region          mybox0 block -250 250 -250 250 -250 250 units box
-# 原子タイプを3種類に変更 (1:ダイヤモンド基板, 2:固定壁, 3:窒素イオン)
+# シミュレーションで使用する単位系を'metal'に設定します。
+# 距離: オングストローム(Å), 時間: ピコ秒(ps), エネルギー: 電子ボルト(eV)
+units           metal
+# シミュレーションで扱う原子の基本的な情報スタイルを'atomic'に定義します。
+atom_style      atomic
+# シミュレーション空間を3次元に設定します。
+dimension       3
+# シミュレーションボックスの境界条件を x, y, z 全てで周期的(periodic)に設定します。
+boundary        p p p
+
+# ------------------------ 2. シミュレーション空間の準備 (System Definition) ------------------------
+# 'mybox0'という名前で、シミュレーション領域を定義します。
+# x,yは -160Å〜+160Å, zは -100Å〜+150Å
+region          mybox0 block -160 160 -160 160 -100 150 units box
+
+# 'mybox0'で定義した領域を実際のシミュレーションボックスとして作成します。
+# '3'は、このシミュレーションで3種類の原子 (①動くC, ②固定C, ③N) を扱うことを意味します。
 create_box      3 mybox0
 
-# 格子定数と質量を設定
+# --- ネイバーリスト設定 (Neighbor list settings) ---
+# 原子間の力を計算する対象を、ポテンシャルのカットオフ+2.0Åの範囲内に限定し、計算を効率化します。
+neighbor        2.0 bin
+# ネイバーリストを毎ステップ更新するように設定し、原子が高速で動く衝突計算に対応させます。
+neigh_modify    every 1 delay 0 check yes
+
+# ------------------------ 3. 原子の配置 (Atom Definition) ------------------------
+# --- ダイヤモンド基板の作成 ---
+# ダイヤモンドの格子定数を設定します。
 lattice         diamond 3.567
+
+# 可動層 (タイプ1) の領域を定義します。
+region          substrate_mobile block -160 160 -160 160 -54.31 54.31 units box
+# 固定層 (タイプ2) の領域を定義します。基板の底面10Å分を固定層とします。
+region          substrate_fixed block -160 160 -160 160 -64.31 -54.31 units box
+
+# 上記で定義した領域をダイヤモンド格子で満たします。
+create_atoms    1 region substrate_mobile
+create_atoms    2 region substrate_fixed
+
+# 質量を設定します。
 mass            1 12.011  # Carbon (可動層)
 mass            2 12.011  # Carbon (固定壁)
 mass            3 14.007  # Nitrogen (イオン)
 
-# ------------------------ POTENTIALS (ポテンシャルの設定) ------------------------
-# 論文を参考にTersoffとZBLのハイブリッドポテンシャルを設定 
+# --- 窒素(N)クラスターの作成 ---
+# 'cluster_region'という名前で、中心(0,0,100Å)、半径10Åの球体領域を定義します。
+region          cluster_region sphere 0 0 100 10.0 units box
+# Nクラスターを配置するための設計図として、fcc格子を定義します（これは単に原子を詰めるためのものです）。
+lattice         fcc 4.0
+# 'cluster_region'の球体領域内を、fcc格子に従って種類番号3の原子で満たし、Nクラスターを作成します。
+create_atoms    3 region cluster_region
+
+# --- グループ化 ---
+group           mobile_atoms type 1   # 可動するダイヤモンド原子
+group           fixed_atoms type 2    # 固定するダイヤモンド原子
+group           N_cluster type 3      # 窒素クラスター
+
+# ------------------------ 4. 初速の設定 (Initialization of Velocities) ------------------------
+# 'mobile_atoms'グループ（動くC基板）に、温度300Kに相当するランダムな初速を与えます。
+velocity        mobile_atoms create 300 12345 mom yes dist gaussian
+# 'fixed_atoms'グループ（固定C層）の速度をゼロに設定し、完全に静止させます。
+velocity        fixed_atoms set 0.0 0.0 0.0
+# 'N_cluster'グループ全体に、z軸マイナス方向へ速度を与えます。
+# 例: -117.4 Å/ps は、N原子1つあたり約10eVの運動エネルギーに相当します。
+velocity        N_cluster set 0 0 -117.4 units box
+
+# ------------------------ 5. 原子間ポテンシャルの設定 (Force Fields) ------------------------
+# Tersoff(多体)とZBL(二体)を併用するため、'hybrid/overlay'スタイルを宣言します。
 pair_style      hybrid/overlay tersoff zbl 0.5 2.0
 
-# ポテンシャルファイルの割り当て
-# 注意: このスクリプトと同じフォルダに "C.tersoff" と "CN.zbl" が必要です
-# C-C間の相互作用はTersoff (タイプ1と2は両方とも炭素)
-pair_coeff      * * tersoff BNC.tersoff C C NULL
+# ポテンシャルファイルの割り当て (このスクリプトと同じフォルダに "SiC.tersoff" が必要です)
+# "SiC.tersoff" ファイルにはC-Cのポテンシャルが含まれています。
+# C(1)-C(1), C(1)-C(2), C(2)-C(2) 間の相互作用はTersoff
+pair_coeff      * * tersoff SiC.tersoff.zbl C C NULL
 
-# C-N間の相互作用はZBL (タイプ1,2の炭素とタイプ3の窒素の間)
-# 炭素(type 1)と窒素(type 3)の相互作用をZBLで定義
-pair_coeff      1 3 zbl 6 7
-# 炭素(type 2)と窒素(type 3)の相互作用も同様にZBLで定義
-pair_coeff      2 3 zbl 6 7
-pair_coeff      3 3 zbl 7 7
+# C-N と N-N 間の相互作用をZBLで上書き定義します。
+# 6と7はそれぞれCとNの原子番号です。
+pair_coeff      1 3 zbl 6 7  # 可動C(1) と N(3)
+pair_coeff      2 3 zbl 6 7  # 固定C(2) と N(3)
+pair_coeff      3 3 zbl 7 7  # N(3) と N(3)
 
-neighbor        2.0 bin
-neigh_modify    every 1 delay 0 check yes
-
-# ------------------------ GEOMETRY & GROUPING (原子配置とグループ化) ------------------------
-# --- ダイヤモンド基板の作成 (元のスクリプトのサイズを維持) ---
-region          substrate_region block -160.465 160.465 -160.465 160.465 -54.31 54.31 units box
-create_atoms    1 region substrate_region
-group           C_substrate type 1
-
-# ★★★ 元のスクリプトにあった周囲の壁を再追加 ★★★
-# --- 周囲を囲む壁の作成 (原子タイプ2を使用) ---
-region          wall_2 block -172.465 -160.47 -160.465 160.465 -54.31 54.31 units box
-create_atoms    2 region wall_2
-group           side2 type 2
-
-region          wall_3 block 160.47 172.465 -160.465 160.47 -54.31 54.31 units box
-create_atoms    2 region wall_3
-group           side3 type 2
-
-region          wall_4 block -172.465 172.465 -172.465 -160.47 -54.31 54.31 units box
-create_atoms    2 region wall_4
-group           side4 type 2
-
-region          wall_5 block -172.465 172.465 160.47 172.465 -54.31 54.31 units box
-create_atoms    2 region wall_5
-group           side5 type 2
-
-region          wall_6 block -172.465 172.465 -172.465 172.465 -59.31 -54.4 units box
-create_atoms    2 region wall_6
-group           side6 type 2
-
-# --- グループの定義 ---
-# 全ての壁原子を一つのグループ(fixed_atoms)にまとめる
-group           fixed_atoms union side2 side3 side4 side5 side6
-# 可動層はタイプ1の炭素原子のみ
-group           mobile_atoms type 1
-
-# ------------------------ INITIAL CONDITIONS (初期条件) ------------------------
-# 固定層(全ての壁)の速度と力を0に設定
-velocity        fixed_atoms set 0.0 0.0 0.0
-fix             freeze fixed_atoms setforce 0.0 0.0 0.0
-
-# 可動層の初期温度を0Kに設定 (論文の設定に準拠)
-velocity        mobile_atoms set 0.0 0.0 0.0 sum yes
-
-# ------------------------ ION CREATION & INJECTION (イオンの生成と照射) ------------------------
-# ダイヤモンド基板表面(z ≈ 54.31)の少し上(z = 65)に窒素イオン(タイプ3)を1つ生成
-# x,yは基板の中央付近
-create_atoms    3 single 0.0 0.0 65.0 units box
-group           ion type 3
-
-# ★★★ イオンの初速設定: 2000 eV ★★★
-velocity        ion set 0.0 0.0 -16.60 units box
-
-# ------------------------ SIMULATION RUN (シミュレーションの実行) ------------------------
-# 可動層(mobile_atoms)とイオン(ion)に対してNVEアンサンブルを適用
-fix             1 all nve
-
-# タイムステップを0.1 fs (0.0001 ps) に設定
+# ------------------------ 6. シミュレーションの実行設定 (Simulation Run) ------------------------
+# 時間の刻み幅を0.0001 ps (0.1 fs)に設定します。高エネルギー衝突計算のため、小さく設定します。
 timestep        0.0001
 
-# 計算結果の出力設定
+# 'hold'という名前のfixを'fixed_atoms'グループに適用し、原子にかかる力を強制的にゼロにします。
+# これにより、基板の土台として原子が完全に固定されます。
+fix             hold fixed_atoms setforce 0.0 0.0 0.0
+# 'f1'という名前のfixを全原子に適用し、NVEアンサンブル（原子数・体積・エネルギーが保存される系）で時間発展させます。
+fix             f1 all nve
+
+# ------------------------ 7. 出力設定 (Output) ------------------------
+# 100ステップごとに、系の熱力学情報をログファイルに出力します。
 thermo          100
-thermo_style    custom step time temp pe ke etotal press
+# thermoで出力する情報を、ステップ、時間、温度、ポテンシャルエネルギー、運動エネルギー、全エネルギーに指定します。
+thermo_style    custom step time temp pe ke etotal
 
-# 原子座標の出力 (可視化用)
-dump            1 all custom 20 dump.nv_implant_original.lammpstrj id type x y z
+# 50ステップごとに全原子の座標をxyz形式のファイルに出力します。シミュレーションの可視化に使用します。
+dump            N_cluster_to_C all xyz 50 N_cluster_to_Diamond.xyz
+# dumpファイルに出力する際、原子の種類番号(1,2,3)を元素名(C,C,N)に置き換えます。
+dump_modify     N_cluster_to_C element C C N
 
-# シミュレーションを30,000ステップ (3 ps) 実行
+# ------------------------ 8. シミュレーションの実行と終了処理 (Actions) ------------------------
+# これまでの設定で、シミュレーションを30000ステップ実行します (合計 3 ps間の現象を計算)。
 run             30000
 
-print           "Simulation finished."
+# runが終了したら、dumpコマンドを停止します。
+undump          N_cluster_to_C
+# シミュレーション終了時の最終的な原子配置や速度などをデータファイルとして書き出します。
+write_data      N_cluster_to_Diamond_final.data
 
+print           "Simulation finished."

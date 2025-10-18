@@ -1,5 +1,5 @@
-BNC.tersoffはグラフェン用なのでダイヤモンドではない
-
+BNC.tersoffとSiC.tersoffはグラフェン用なのでダイヤモンドではない
+SiC.tersoff.zblで作り直した
 
 # C C C (m, gamma, lambda3, c, d, h, n, beta, lambda2, B, R, D, lambda1, A)
 C C C 
