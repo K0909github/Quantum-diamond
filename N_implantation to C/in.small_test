@@ -51,7 +51,7 @@ group           N_cluster type 3      # 窒素クラスター
 velocity        mobile_atoms create 300 12345 mom yes dist gaussian
 velocity        fixed_atoms set 0.0 0.0 0.0
 # N原子あたり約10eVに相当する速度
-velocity        N_cluster set 0 0 -117.4 units box
+velocity        N_cluster set 0 0 -525 units box
 
 # ------------------------ 5. 原子間ポテンシャルの設定 (Force Fields) ------------------------
 pair_style      hybrid/overlay tersoff zbl 0.5 2.0
