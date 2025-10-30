@@ -1,0 +1,77 @@
+#1atom_1keV_N_implantation_to_C_ZBL_potential_filedata.txt
+# Newton's third law
+newton on
+
+units metal
+atom_style atomic
+dimension 3
+boundary p p p
+
+# setting_simulation_box
+region          mybox0 block -500 500 -500 500 -500 500
+create_box      3 mybox0 # 3 types: C_sub(1), Fixed_sub(2), N(3)
+
+# Neighbor list settings 
+neighbor        2.0 bin 
+neigh_modify    every 1 delay 0 check yes
+
+# set_up atom (provide your C substrate data)
+# NOTE: 下の read_data のファイル名は手元のダイヤモンドC基板データに合わせて変更してください。
+# 例: diamond_substrate/diamond_300K_annealed.data など。
+read_data       diamond_160A_with_vacancies.data add append
+
+# グループ定義（type 1: C、type 2: 固定層C、type 3: Ar）
+group           C_sub type 1
+group           Fixed_sub type 2
+
+# N atom injection (1 atom)
+# 基板の上方(z=100 Å)に1原子のNを配置（座標はbox単位で指定）
+create_atoms    3 single 0 0 100 units box
+mass 3          14.0067 # N
+group           N_atom type 3
+
+# Initialization
+velocity        C_sub create 300 12345 mom yes dist gaussian   # type 1
+velocity        Fixed_sub set 0.0 0.0 0.0                      # type 2
+# 1 keV のN原子入射（units metalでは速度はÅ/ps）
+# 1 keV, m(N)=14.0067 amu -> v ≈ 1174 Å/ps
+velocity        N_atom set 0 0 -1174.0                         # type 3, 1keV
+
+# Force field 
+# このバイナリ（2024-02-07）の他入力例に合わせ、zblに2引数を与える（例: 4.5 4.5）
+pair_style      hybrid/overlay tersoff zbl 4.5 4.5
+pair_coeff      * * tersoff C.tersoff C C NULL
+# zbl: Z1 Z2  -> C(6)-N(7)（cutoffはpair_style側で4.5 Åを指定）
+pair_coeff      1 3 zbl 6 7
+pair_coeff      2 3 zbl 6 7
+pair_coeff      3 3 zbl 7 7
+
+neigh_modify delay 0
+
+# Operation
+timestep 0.001
+
+fix             hold Fixed_sub setforce 0.0 0.0 0.0
+fix             f1 all nve
+
+# Output
+thermo          1000 # Display by 100 timestep
+thermo_style    custom time ke pe etotal temp
+
+# OneDrive配下への高頻度書き込みはI/Oエラーを誘発するため、/tmpに出力
+variable        OUTDIR index /tmp/N_implantation_to_C
+variable        OUTFILE index 1atom_1keV_N_to_Csub.xyz
+shell           mkdir -p ${OUTDIR}
+dump            N_to_Csub all xyz 100 ${OUTDIR}/${OUTFILE}
+dump_modify     N_to_Csub element C_Sub Fixed_C N flush yes
+#
+#
+
+
+# Actions
+# デフォルト実行ステップ数（-var NSTEPS で上書き可能）
+variable        NSTEPS index 12000
+run             ${NSTEPS}
+
+undump          N_to_Csub
+write_data      1atom_1keV_N_to_C.data
