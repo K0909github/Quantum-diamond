@@ -35,7 +35,7 @@ velocity        C_sub create 300 12345 mom yes dist gaussian   # type 1
 velocity        Fixed_sub set 0.0 0.0 0.0                      # type 2
 # 1 keV のN原子入射（units metalでは速度はÅ/ps）
 # 1 keV, m(N)=14.0067 amu -> v ≈ 1174 Å/ps
-velocity        N_atom set 0 0 -1174.0                         # type 3, 1keV
+velocity        N_atom set 0 0 -1484.6                         # type 3, 1.6keV
 
 # Force field 
 # このバイナリ（2024-02-07）の他入力例に合わせ、zblに2引数を与える（例: 4.5 4.5）
@@ -64,8 +64,11 @@ variable        OUTFILE index 1atom_1keV_N_to_Csub.xyz
 shell           mkdir -p ${OUTDIR}
 dump            N_to_Csub all xyz 100 ${OUTDIR}/${OUTFILE}
 dump_modify     N_to_Csub element C_Sub Fixed_C N flush yes
-#
-#
+
+# --- original dump settings (kept for reference; writing under /mnt/c/OneDrive may cause I/O errors on WSL) ---
+# dump            N_to_Csub all xyz 100 1atom_1keV_N_to_Csub.xyz
+# dump_modify     N_to_Csub element C_Sub Fixed_C N
+
 
 
 # Actions
