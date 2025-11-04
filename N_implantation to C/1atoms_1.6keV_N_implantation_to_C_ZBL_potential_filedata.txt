@@ -1,4 +1,4 @@
-#1atom_1keV_N_implantation_to_C_ZBL_potential_filedata.txt
+#1atoms_1.6keV_N_implantation_to_C_ZBL_potential_filedata.txt
 # Newton's third law
 newton on
 
@@ -20,7 +20,7 @@ neigh_modify    every 1 delay 0 check yes
 # 例: diamond_substrate/diamond_300K_annealed.data など。
 read_data       diamond_160A_with_vacancies.data add append
 
-# グループ定義（type 1: C、type 2: 固定層C、type 3: Ar）
+# グループ定義（type 1: C、type 2: 固定層C、type 3: N）
 group           C_sub type 1
 group           Fixed_sub type 2
 
@@ -33,8 +33,8 @@ group           N_atom type 3
 # Initialization
 velocity        C_sub create 300 12345 mom yes dist gaussian   # type 1
 velocity        Fixed_sub set 0.0 0.0 0.0                      # type 2
-# 1 keV のN原子入射（units metalでは速度はÅ/ps）
-# 1 keV, m(N)=14.0067 amu -> v ≈ 1174 Å/ps
+# 1.6 keV のN原子入射（units metalでは速度はÅ/ps）
+# 1.6 keV, m(N)=14.0067 amu -> v ≈ 1484.6 Å/ps
 velocity        N_atom set 0 0 -1484.6                         # type 3, 1.6keV
 
 # Force field 
@@ -55,19 +55,19 @@ fix             hold Fixed_sub setforce 0.0 0.0 0.0
 fix             f1 all nve
 
 # Output
-thermo          1000 # Display by 100 timestep
+thermo          1000 # Display every 1000 timesteps
 thermo_style    custom time ke pe etotal temp
 
 # OneDrive配下への高頻度書き込みはI/Oエラーを誘発するため、/tmpに出力
-variable        OUTDIR index /tmp/N_implantation_to_C
-variable        OUTFILE index 1atom_1keV_N_to_Csub.xyz
-shell           mkdir -p ${OUTDIR}
-dump            N_to_Csub all xyz 100 ${OUTDIR}/${OUTFILE}
-dump_modify     N_to_Csub element C_Sub Fixed_C N flush yes
+#variable        OUTDIR index /tmp/N_implantation_to_C
+#variable        OUTFILE index 1atom_1.6keV_N_to_Csub.xyz
+#shell           mkdir -p ${OUTDIR}
+#dump            N_to_Csub all xyz 100 ${OUTDIR}/${OUTFILE}
+#dump_modify     N_to_Csub element C_Sub Fixed_C N flush yes
 
 # --- original dump settings (kept for reference; writing under /mnt/c/OneDrive may cause I/O errors on WSL) ---
-# dump            N_to_Csub all xyz 100 1atom_1keV_N_to_Csub.xyz
-# dump_modify     N_to_Csub element C_Sub Fixed_C N
+dump            N_to_Csub all xyz 100 1atom_1.6keV_N_to_Csub.xyz
+dump_modify     N_to_Csub element C_Sub Fixed_C N
 
 
 
@@ -77,4 +77,4 @@ variable        NSTEPS index 12000
 run             ${NSTEPS}
 
 undump          N_to_Csub
-write_data      1atom_1keV_N_to_C.data
+write_data      1atom_1.6keV_N_to_C.data
