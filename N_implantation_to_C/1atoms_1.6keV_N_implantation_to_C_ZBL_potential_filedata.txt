@@ -27,6 +27,8 @@ group           Fixed_sub type 2
 # N atom injection (1 atom)
 # 基板の上方(z=100 Å)に1原子のNを配置（座標はbox単位で指定）
 create_atoms    3 single 0 0 70 units box
+mass 1          12.0107
+mass 2          12.0107
 mass 3          14.0067 # N
 group           N_atom type 3
 
@@ -38,10 +40,11 @@ velocity        Fixed_sub set 0.0 0.0 0.0                      # type 2
 velocity        N_atom set 0 0 -1484.6 units box                          # type 3, 1.6keV
 
 # Force field 
-# このバイナリ（2024-02-07）の他入力例に合わせ、zblに2引数を与える（例: 4.5 4.5）
-pair_style      hybrid/overlay tersoff zbl 0.1 4.5#1.47 2.52
-pair_coeff      * * tersoff C.tersoff C C NULL
-# zbl: Z1 Z2  -> C(6)-N(7)（cutoffはpair_style側で4.5 Åを指定）
+# tersoff/zblはポテンシャルファイル内のカットオフ設定をそのまま用いる
+pair_style      tersoff/zbl
+# type1/2 -> C, type3 -> N
+pair_coeff      * * diamond_nv.tersoff.zbl C C N
+# zbl: Z1 Z2  -> C(6)-N(7)（近距離力の切断はポテンシャルファイルが保持）
 pair_coeff      1 3 zbl 6 7
 pair_coeff      2 3 zbl 6 7
 pair_coeff      3 3 zbl 7 7
@@ -55,17 +58,17 @@ fix             hold Fixed_sub setforce 0.0 0.0 0.0
 fix             f1 all nve
 
 # Output
-thermo          100 # Display every 1000 timesteps
+thermo          100 # Display every 100 timesteps
 thermo_style    custom time ke pe etotal temp
 
-# OneDrive配下への高頻度書き込みはI/Oエラーを誘発するため、/tmpに出力
+# OneDrive配下への高頻度書き込みはI/Oエラーを誘発するため、必要に応じて下記の/tmp出力ブロックを有効化
 #variable        OUTDIR index /tmp/N_implantation_to_C
 #variable        OUTFILE index 1atom_1.6keV_N_to_Csub.xyz
 #shell           mkdir -p ${OUTDIR}
 #dump            N_to_Csub all xyz 100 ${OUTDIR}/${OUTFILE}
 #dump_modify     N_to_Csub element C_Sub Fixed_C N flush yes
 
-# --- original dump settings (kept for reference; writing under /mnt/c/OneDrive may cause I/O errors on WSL) ---
+# --- default dump settings（OneDrive直下に出力する場合） ---
 dump            N_to_Csub all xyz 10 1atom_1.6keV_N_to_Csub.xyz
 dump_modify     N_to_Csub element C_Sub Fixed_C N
 

@@ -1,0 +1,29 @@
+# Tersoff/ZBL potential for Diamond NV center - CORRECTED R/D
+# Parameters from: T. Liu et al., Mater. Futures 3 (2024) 045701
+#
+# Conversion note:
+# LAMMPS R = (Paper_R + Paper_S) / 2
+# LAMMPS D = (Paper_S - Paper_R) / 2
+#
+# el1 el2 el3 m gamma lambda3 c d h n beta lambda2 B R D lambda1 A ZBLcut ZBLexpscale
+
+# 1. Pure Interactions
+# C-C: R_paper=1.95, S_paper=2.10 -> R=2.025, D=0.075
+C  C  C  3.0 1.0 0.0 1.9981e4 7.034e0 -3.3953e-1 0.99054 4.1612e-6 2.3064 3.8963e2 2.025 0.075 3.4653 1.5448e3 6.0 6.0 0.33 14.0
+
+# N-N: R_paper=1.8, S_paper=2.0 -> R=1.9, D=0.1
+# Note: beta applied with 10^-7 factor
+N  N  N  3.0 1.0 0.0 23.5 3.75 -0.4 0.665 1.9278e-7 5.5436 138.7787 1.9 0.1 5.9798 128.8687 7.0 7.0 0.9 20.0
+
+# 2. Mixed Interactions (C-N)
+# N-C: R_paper=2.0, S_paper=2.3 -> R=2.15, D=0.15
+
+# C-N Bond (Center-Neighbor mismatch) -> Use N-C params
+C  N  C  3.0 1.0 0.0 7.9934e4 134.32 -0.9973 12.4498 1.0526e-1 2.5115 219.45 2.15 0.15 5.7708 1.1000e4 6.0 7.0 0.05 25.0
+C  N  N  3.0 1.0 0.0 7.9934e4 134.32 -0.9973 12.4498 1.0526e-1 2.5115 219.45 2.15 0.15 5.7708 1.1000e4 6.0 7.0 0.05 25.0
+N  C  C  3.0 1.0 0.0 7.9934e4 134.32 -0.9973 12.4498 1.0526e-1 2.5115 219.45 2.15 0.15 5.7708 1.1000e4 7.0 6.0 0.05 25.0
+N  C  N  3.0 1.0 0.0 7.9934e4 134.32 -0.9973 12.4498 1.0526e-1 2.5115 219.45 2.15 0.15 5.7708 1.1000e4 7.0 6.0 0.05 25.0
+
+# Bond type is same, but angle atom is different -> Use pure params
+C  C  N  3.0 1.0 0.0 1.9981e4 7.034e0 -3.3953e-1 0.99054 4.1612e-6 2.3064 3.8963e2 2.025 0.075 3.4653 1.5448e3 6.0 6.0 0.33 14.0
+N  N  C  3.0 1.0 0.0 23.5 3.75 -0.4 0.665 1.9278e-7 5.5436 138.7787 1.9 0.1 5.9798 128.8687 7.0 7.0 0.9 20.0
