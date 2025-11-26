@@ -27,8 +27,6 @@ group           Fixed_sub type 2
 # N atom injection (1 atom)
 # 基板の上方(z=100 Å)に1原子のNを配置（座標はbox単位で指定）
 create_atoms    3 single 0 0 70 units box
-mass 1          12.0107
-mass 2          12.0107
 mass 3          14.0067 # N
 group           N_atom type 3
 
@@ -37,13 +35,14 @@ velocity        C_sub create 300 12345 mom yes dist gaussian   # type 1
 velocity        Fixed_sub set 0.0 0.0 0.0                      # type 2
 # 1.6 keV のN原子入射（units metalでは速度はÅ/ps）
 # 1.6 keV, m(N)=14.0067 amu -> v ≈ 1484.6 Å/ps
-velocity        N_atom set 0 0 -1484.6 units box                          # type 3, 1.6keV
+velocity        N_atom set 0 0 -1484.6 #units box                          # type 3, 1.6keV
 
 # Force field 
-# tersoff/zblはポテンシャルファイル側のカットオフを利用
-pair_style      tersoff/zbl
-# type1/2 -> C, type3 -> N
+# このバイナリ（2024-02-07）の他入力例に合わせ、zblに2引数を与える（例: 4.5 4.5）
+pair_style      tersoff/zbl 
 pair_coeff      * * diamond_nv.tersoff.zbl C C N
+
+neigh_modify delay 0
 
 # Operation
 timestep        0.0001
