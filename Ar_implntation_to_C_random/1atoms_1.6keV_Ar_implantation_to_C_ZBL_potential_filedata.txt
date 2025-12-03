@@ -19,6 +19,7 @@ neigh_modify    every 1 delay 0 check yes
 
 # Provide your equilibrated diamond substrate data file here
 read_data       diamond_160A_with_vacancies.data add append
+mass 3 39.948
 
 group           C_sub type 1
 group           Fixed_sub type 2
