@@ -1,0 +1,90 @@
+## 1.6 keV Ar implantation with C Tersoff + Ar–C ZBL coupling (randomized injection)
+
+# ------------------------------------------------------------------
+# Initialization & clean substrate snapshot
+# ------------------------------------------------------------------
+newton          on
+units           metal
+atom_style      atomic
+dimension       3
+boundary        p p p
+
+# Simulation cell (large enough to hold 160 Å substrate + vacuum)
+region          mybox0 block -500 500 -500 500 -500 500
+create_box      3 mybox0  # type1=C_sub, type2=Fixed_C, type3=Ar
+
+# Neighbor list settings
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# Provide your equilibrated diamond substrate data file here
+read_data       diamond_160A_with_vacancies.data add append
+
+group           C_sub type 1
+group           Fixed_sub type 2
+
+# Substrate initialization
+velocity        C_sub create 300 12345 mom yes dist gaussian
+velocity        Fixed_sub set 0.0 0.0 0.0
+fix             hold Fixed_sub setforce 0.0 0.0 0.0
+
+# Store the pristine substrate so each run restarts from the same state
+write_restart   restart.clean_substrate
+
+# ------------------------------------------------------------------
+# Loop over randomized injections (default: 10 shots)
+# ------------------------------------------------------------------
+variable        m loop 10
+
+label           loop_start
+
+	# Reset to the pristine state from disk
+	clear
+	read_restart    restart.clean_substrate
+	newton          on
+
+	# Re-issue key settings after restart
+	pair_style      hybrid tersoff/zbl zbl 1.0 1.5
+	pair_coeff      * * tersoff/zbl diamond_nv.tersoff.zbl C C NULL
+	pair_coeff      3 3 zbl 18 18
+	pair_coeff      1 3 zbl 6 18
+	pair_coeff      2 3 zbl 6 18
+
+	neighbor        2.0 bin
+	neigh_modify    every 1 delay 0 check yes
+
+	group           C_sub type 1
+	group           Fixed_sub type 2
+	fix             hold Fixed_sub setforce 0.0 0.0 0.0
+	fix             f1 all nve
+
+	# Random injection setup (modify ranges to match substrate size if needed)
+	variable        rnd_seed equal 12345+${m}
+	variable        rnd_seed_y equal 67890+${m}
+	variable        x_pos equal random(-10.0,10.0,${rnd_seed})
+	variable        y_pos equal random(-10.0,10.0,${rnd_seed_y})
+
+	create_atoms    3 single ${x_pos} ${y_pos} 70 units box
+	mass            3 39.948
+	group           Ar_atom type 3
+
+	# 1.6 keV Ar -> v ≈ 8.79e2 Å/ps in metal units
+	velocity        Ar_atom set 0 0 -879.0
+
+	timestep        0.0001
+
+	thermo          100
+	thermo_style    custom time step ke pe etotal temp press
+
+	dump            d1 all xyz 10 dump_run_${m}.xyz
+	dump_modify     d1 element C_Sub Fixed_C Ar
+
+	run             1000
+
+	write_data      final_data_run_${m}.data
+	undump          d1
+
+	next            m
+	jump            SELF loop_start
+
+print           "All randomized Ar implantations completed."
