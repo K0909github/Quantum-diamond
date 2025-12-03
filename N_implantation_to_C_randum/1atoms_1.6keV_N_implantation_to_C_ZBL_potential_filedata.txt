@@ -1,0 +1,104 @@
+# ------------------------------------------------------------------
+# Initialization & Substrate Setup (Run once)
+# ------------------------------------------------------------------
+units           metal
+atom_style      atomic
+dimension       3
+boundary        p p p
+
+# Box作成 (基板読み込み前に定義)
+region          mybox0 block -500 500 -500 500 -500 500
+create_box      3 mybox0 
+
+# 基板データの読み込み
+# ★注意: 手元のデータファイル名に変更してください
+read_data       diamond_160A_with_vacancies.data add append
+
+# グループ定義（リスタート後も使えるようにIDで定義推奨だが、ここでは再定義する）
+group           C_sub type 1
+group           Fixed_sub type 2
+
+# 基板の初期化（温度設定など）
+velocity        C_sub create 300 12345 mom yes dist gaussian
+velocity        Fixed_sub set 0.0 0.0 0.0
+fix             hold Fixed_sub setforce 0.0 0.0 0.0
+
+# ★重要: ここで「注入直前」のクリーンな状態を保存します
+write_restart   restart.clean_substrate
+
+# ------------------------------------------------------------------
+# Loop Start (10 runs)
+# ------------------------------------------------------------------
+# ループ変数の定義 (m = 1 to 10)
+variable        m loop 10
+
+label           loop_start
+
+    # 1. クリーンな状態を復元 (前の回のN原子やダメージを消去)
+    clear
+    read_restart    restart.clean_substrate
+    
+    # ※ restart後は一部の設定がリセットされるため再定義が必要です
+    
+    # 再設定: Force field
+    pair_style      tersoff/zbl 
+    pair_coeff      * * diamond_nv.tersoff.zbl C C N
+    
+    # 再設定: Neighbor list
+    neighbor        2.0 bin 
+    neigh_modify    every 1 delay 0 check yes
+    
+    # 再設定: Groups & Fixes (IDは保存されていますが、fixは消えます)
+    group           C_sub type 1
+    group           Fixed_sub type 2
+    fix             hold Fixed_sub setforce 0.0 0.0 0.0
+    fix             f1 all nve
+    
+    # --------------------------------------------------------------
+    # Random Injection Setup
+    # --------------------------------------------------------------
+    # 乱数シードをループ回数(m)に応じて変える
+    variable        rnd_seed equal 12345+${m}
+    variable        rnd_seed_y equal 67890+${m}
+    
+    # ランダム位置の計算 (例: -10A ~ 10A の範囲)
+    # 基板サイズに合わせて範囲を調整してください
+    variable        x_pos equal random(-10.0,10.0,${rnd_seed})
+    variable        y_pos equal random(-10.0,10.0,${rnd_seed_y})
+    
+    # N原子の生成 (Type 3)
+    create_atoms    3 single ${x_pos} ${y_pos} 70 units box
+    group           N_atom type 3
+    mass            3 14.0067
+    
+    # 初速度の付与 (1.6 keV N -> approx -1484.6 A/ps)
+    velocity        N_atom set 0 0 -1484.6
+    
+    # --------------------------------------------------------------
+    # Run Simulation
+    # --------------------------------------------------------------
+    timestep        0.0001
+    
+    # Output設定 (ファイル名にループ番号 ${m} を含める)
+    thermo          100
+    thermo_style    custom time ke pe etotal temp
+    
+    # dumpファイルも毎回別名で保存 (例: run_1.xyz, run_2.xyz...)
+    dump            d1 all xyz 100 dump_run_${m}.xyz
+    dump_modify     d1 element C C N
+    
+    # 実行
+    run             1000
+    
+    # 結果の保存 (dataファイル)
+    write_data      final_data_run_${m}.data
+    
+    # dumpの後始末
+    undump          d1
+
+    # 次のループへ
+    next            m
+    jump            SELF loop_start
+
+# Loop End
+print           "All 10 simulations completed."
