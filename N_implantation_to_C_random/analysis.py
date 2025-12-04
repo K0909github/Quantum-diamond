@@ -13,34 +13,91 @@ def parse_atoms_section(lines: Iterable[str]) -> list[tuple[int, float]]:
 
 	atoms: list[tuple[int, float]] = []
 	reading = False
+	seen_data = False
+	atom_style = None
+
 	for line in lines:
 		stripped = line.strip()
 		if not stripped:
-			if reading:
-				break  # blank line marks end of Atoms block
+			if reading and seen_data:
+				break  # blank line after data terminates section
 			continue
 
-		if stripped.lower().startswith("atoms"):
+		lower = stripped.lower()
+		if lower.startswith("atoms"):
 			reading = True
+			seen_data = False
+			atom_style = None
+			if "#" in stripped:
+				atom_style = stripped.split("#", 1)[1].strip().split()[0].lower()
 			continue
 
 		if reading:
-			if stripped[0].isalpha():  # hit next section
+			if stripped[0].isalpha():  # reached next section header
 				break
 			parts = stripped.split()
-			if len(parts) < 5:
+			atom_info = _extract_type_and_z(parts, atom_style)
+			if atom_info is None:
 				continue
-			atom_type = int(parts[1])
-			z_coord = float(parts[4])
-			atoms.append((atom_type, z_coord))
+			atoms.append(atom_info)
+			seen_data = True
 
 	return atoms
+
+
+def _extract_type_and_z(parts: list[str], atom_style: str | None) -> tuple[int, float] | None:
+	"""Handle common atom_style layouts (atomic, charge, molecular, full)."""
+
+	cols = len(parts)
+	if cols < 5:
+		return None
+
+	style = (atom_style or "").lower()
+
+	try:
+		if style.startswith("atomic"):
+			# id type x y z (ix iy iz optional)
+			return int(parts[1]), float(parts[4])
+		if style.startswith("charge") or style.startswith("electron"):
+			# id type q x y z
+			if cols < 6:
+				return None
+			return int(parts[1]), float(parts[5])
+		if style.startswith("molecular"):
+			# id mol type x y z
+			if cols < 6:
+				return None
+			return int(parts[2]), float(parts[5])
+		if style.startswith("full"):
+			# id mol type q x y z
+			if cols < 7:
+				return None
+			return int(parts[2]), float(parts[6])
+
+		# fallback heuristic: assume second entry is type, z just before image flags
+		atom_type = int(parts[1])
+		if cols >= 8 and all(_looks_like_int(tok) for tok in parts[-3:]):
+			z_index = cols - 4
+		else:
+			z_index = cols - 1
+		return atom_type, float(parts[z_index])
+	except ValueError:
+		return None
+
+
+def _looks_like_int(token: str) -> bool:
+	try:
+		int(token)
+		return True
+	except ValueError:
+		return False
 
 
 def compute_depths(data_path: Path) -> list[float]:
 	"""Compute injection depths for all nitrogen atoms in a data file."""
 
-	atoms = parse_atoms_section(data_path.read_text().splitlines())
+	with data_path.open("r", encoding="utf-8", errors="ignore") as fh:
+		atoms = parse_atoms_section(fh)
 	if not atoms:
 		return []
 
