@@ -72,8 +72,14 @@ label           loop_start
     group           N_atom type 3
     mass            3 14.0067
     
-    # 初速度の付与 (1.6 keV N -> approx -1484.6 A/ps)
-    velocity        N_atom set 0 0 -1484.6
+    # 初速度の付与 (1.6 keV N, 7° tilt to avoid channeling)
+    variable        v_mag equal 1484.6
+    variable        tilt_rad equal 7*PI/180
+    variable        phi_rad equal random(0.0,360.0,${rnd_seed})*PI/180
+    variable        vxs equal ${v_mag}*sin(${tilt_rad})*cos(${phi_rad})
+    variable        vys equal ${v_mag}*sin(${tilt_rad})*sin(${phi_rad})
+    variable        vzs equal -${v_mag}*cos(${tilt_rad})
+    velocity        N_atom set ${vxs} ${vys} ${vzs}
     
     # --------------------------------------------------------------
     # Run Simulation
