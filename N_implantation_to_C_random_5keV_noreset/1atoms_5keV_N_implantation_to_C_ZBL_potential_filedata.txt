@@ -38,10 +38,6 @@ neigh_modify    every 1 delay 0 check yes
 
 fix             f1 all nve
 
-# 原子IDの最大値（最後に作った原子IDを拾うため）
-compute         idall all property/atom id
-compute         maxid all reduce max c_idall
-
 # ------------------------------------------------------------------
 # Loop Start (10 implantations, no substrate reset)
 # ------------------------------------------------------------------
@@ -65,9 +61,10 @@ label           loop_start
     variable        y_pos equal random(-10.0,10.0,${rnd_seed_y})
     
     # N原子の生成 (Type 3)
-    # create_atoms後に「最大ID=最後に作った原子」とみなして、その1個だけに速度を付ける
+    # create_atoms直後の総原子数(atoms)を新規原子IDとして扱い、その1個だけに速度を付ける
+    # ※ read_dataでIDが1..N連番かつ delete_atoms 等で欠番を作っていない前提
     create_atoms    3 single ${x_pos} ${y_pos} 200 units box
-    variable        new_id equal c_maxid
+    variable        new_id equal atoms
     group           N_new id ${new_id}
     
     # 初速度の付与 (1.6 keV N, 7° tilt to avoid channeling)
