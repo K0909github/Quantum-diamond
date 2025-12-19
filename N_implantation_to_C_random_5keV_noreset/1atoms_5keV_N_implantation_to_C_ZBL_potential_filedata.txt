@@ -39,6 +39,19 @@ neigh_modify    every 1 delay 0 check yes
 fix             f1 all nve
 
 # ------------------------------------------------------------------
+# Output (Run once)
+# ------------------------------------------------------------------
+timestep        0.0001
+
+thermo          100
+thermo_style    custom step time ke pe etotal temp
+
+# 連続出力: 1本のdumpに全期間を保存
+dump            d1 all xyz 100 dump_all.xyz
+dump_modify     d1 element C_sub Fixed_C N
+dump_modify     d1 sort id
+
+# ------------------------------------------------------------------
 # Loop Start (10 implantations, no substrate reset)
 # ------------------------------------------------------------------
 # ループ変数の定義 (m = 1 to 10)
@@ -65,6 +78,7 @@ label           loop_start
     # ※ read_dataでIDが1..N連番かつ delete_atoms 等で欠番を作っていない前提
     create_atoms    3 single ${x_pos} ${y_pos} 200 units box
     variable        new_id equal atoms
+    group           N_new clear
     group           N_new id ${new_id}
     
     # 初速度の付与 (1.6 keV N, 7° tilt to avoid channeling)
@@ -79,28 +93,16 @@ label           loop_start
     # --------------------------------------------------------------
     # Run Simulation
     # --------------------------------------------------------------
-    timestep        0.0001
-    
-    # Output設定 (ファイル名にループ番号 ${m} を含める)
-    thermo          100
-    thermo_style    custom time ke pe etotal temp
-    
-    # dumpファイルも毎回別名で保存 (例: run_1.xyz, run_2.xyz...)
-    dump            d1 all xyz 100 dump_run_${m}.xyz
-    dump_modify     d1 element C_sub Fixed_C N
-    
     # 実行
     run             2000
     
     # 結果の保存 (dataファイル)
     write_data      final_data_run_${m}.data
     
-    # dumpの後始末
-    undump          d1
-
     # 次のループへ
     next            m
     jump            SELF loop_start
 
 # Loop End
+undump          d1
 print           "All 10 simulations completed."
