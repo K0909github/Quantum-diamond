@@ -42,7 +42,7 @@ variable        seed equal 12345
 # 照射位置（必要ならここだけ変更）
 variable        x_pos equal 0.0
 variable        y_pos equal 0.0
-variable        z_pos equal 70.0
+variable        z_pos equal 200.0
 
 # クラスター半径（fcc 5.4051 を想定。まず小さめに作って10個に揃える）
 variable        r_cluster equal 4.6
@@ -77,7 +77,7 @@ thermo_style    custom time ke pe etotal temp
 dump            d1 all xyz 100 dump_run_1.xyz
 dump_modify     d1 element C_sub Fixed_C N
 
-run             1000
+run             2000
 
 write_data      final_data_run_1.data
 undump          d1

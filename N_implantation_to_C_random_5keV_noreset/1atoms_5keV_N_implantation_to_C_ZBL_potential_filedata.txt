@@ -68,10 +68,10 @@ label           loop_start
     variable        rnd_seed equal 12345+${m}
     variable        rnd_seed_y equal 67890+${m}
     
-    # ランダム位置の計算 (例: -10A ~ 10A の範囲)
+    # ランダム位置の計算 (例: -4.6A ~ 4.6A の範囲)
     # 基板サイズに合わせて範囲を調整してください
-    variable        x_pos equal random(-10.0,10.0,${rnd_seed})
-    variable        y_pos equal random(-10.0,10.0,${rnd_seed_y})
+    variable        x_pos equal random(-4.6,4.6,${rnd_seed})
+    variable        y_pos equal random(-4.6,4.6,${rnd_seed_y})
     
     # N原子の生成 (Type 3)
     # create_atoms直後の総原子数(atoms)を新規原子IDとして扱い、その1個だけに速度を付ける
@@ -81,7 +81,7 @@ label           loop_start
     group           N_new clear
     group           N_new id ${new_id}
     
-    # 初速度の付与 (1.6 keV N, 7° tilt to avoid channeling)
+    # 初速度の付与 (5keV N, 7° tilt to avoid channeling)
     variable        v_mag equal 2624.3
     variable        tilt_rad equal 7*PI/180
     variable        phi_rad equal random(0.0,360.0,${rnd_seed})*PI/180
