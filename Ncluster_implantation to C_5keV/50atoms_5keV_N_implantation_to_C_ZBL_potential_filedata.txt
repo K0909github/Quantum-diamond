@@ -14,6 +14,11 @@ create_box      3 mybox0
 # ★注意: 手元のデータファイル名に変更してください
 read_data       diamond_160A_with_vacancies.data add append
 
+# 質量は velocity 等で使うため、速度付与より前に必ず定義しておく
+mass            1 12.011
+mass            2 12.011
+mass            3 14.0067
+
 # Force field
 pair_style      tersoff/zbl
 pair_coeff      * * diamond_nv.tersoff.zbl C C N
@@ -48,14 +53,74 @@ variable        z_pos equal 200.0
 variable        r_cluster equal 9.0
 
 region          N_cluster_region sphere ${x_pos} ${y_pos} ${z_pos} ${r_cluster} units box
-lattice         fcc 5.4051
-create_atoms    3 region N_cluster_region
-mass            3 14.0067
 
-group           N_cluster_all type 3
-group           N_cluster random 50 ${seed} N_cluster_all
-group           N_cluster_excess subtract N_cluster_all N_cluster
-delete_atoms    group N_cluster_excess compress yes
+# LAMMPS のバージョンによっては `group ... random` が存在しないため、
+# ここでは「必ず50原子」になるように座標を明示して生成する
+variable        d equal 1.5
+variable        dz equal 0.75
+
+# 5x5x2 = 50 atoms
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(-2)*v_d) $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(-2)*v_d) $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(-2)*v_d) $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(-2)*v_d) $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(-2)*v_d) $(v_z_pos-v_dz) units box
+
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(-1)*v_d) $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(-1)*v_d) $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(-1)*v_d) $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(-1)*v_d) $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(-1)*v_d) $(v_z_pos-v_dz) units box
+
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(0)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(0)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(0)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(0)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(0)*v_d)  $(v_z_pos-v_dz) units box
+
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(1)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(1)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(1)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(1)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(1)*v_d)  $(v_z_pos-v_dz) units box
+
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(2)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(2)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(2)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(2)*v_d)  $(v_z_pos-v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(2)*v_d)  $(v_z_pos-v_dz) units box
+
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(-2)*v_d) $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(-2)*v_d) $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(-2)*v_d) $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(-2)*v_d) $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(-2)*v_d) $(v_z_pos+v_dz) units box
+
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(-1)*v_d) $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(-1)*v_d) $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(-1)*v_d) $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(-1)*v_d) $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(-1)*v_d) $(v_z_pos+v_dz) units box
+
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(0)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(0)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(0)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(0)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(0)*v_d)  $(v_z_pos+v_dz) units box
+
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(1)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(1)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(1)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(1)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(1)*v_d)  $(v_z_pos+v_dz) units box
+
+create_atoms    3 single $(v_x_pos+(-2)*v_d) $(v_y_pos+(2)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(-1)*v_d) $(v_y_pos+(2)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(0)*v_d)  $(v_y_pos+(2)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(1)*v_d)  $(v_y_pos+(2)*v_d)  $(v_z_pos+v_dz) units box
+create_atoms    3 single $(v_x_pos+(2)*v_d)  $(v_y_pos+(2)*v_d)  $(v_z_pos+v_dz) units box
+
+group           N_cluster type 3
 
 # 初速度の付与 (5 keV N, 7° tilt to avoid channeling)
 variable        v_mag equal 2624.3
@@ -75,7 +140,7 @@ thermo          100
 thermo_style    custom time ke pe etotal temp
 
 dump            d1 all xyz 100 dump_run_1.xyz
-dump_modify     d1 element C_sub Fixed_C N
+dump_modify     d1 element C C N
 
 run             2000
 
