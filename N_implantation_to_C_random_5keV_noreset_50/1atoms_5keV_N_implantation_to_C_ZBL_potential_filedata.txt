@@ -78,7 +78,6 @@ label           loop_start
     # ※ read_dataでIDが1..N連番かつ delete_atoms 等で欠番を作っていない前提
     create_atoms    3 single ${x_pos} ${y_pos} 200 units box
     variable        new_id equal atoms
-    group           N_new clear
     group           N_new id ${new_id}
     
     # 初速度の付与 (5keV N, 7° tilt to avoid channeling)

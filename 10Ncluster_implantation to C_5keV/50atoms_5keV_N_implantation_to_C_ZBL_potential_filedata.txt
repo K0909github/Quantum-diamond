@@ -140,7 +140,7 @@ thermo          100
 thermo_style    custom time ke pe etotal temp
 
 dump            d1 all xyz 100 dump_run_1.xyz
-dump_modify     d1 element C_sub Fixed_C N
+dump_modify     d1 element C C N
 
 run             2000
 

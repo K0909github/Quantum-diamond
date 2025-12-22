@@ -38,6 +38,9 @@ neigh_modify    every 1 delay 0 check yes
 
 fix             f1 all nve
 
+
+compute         atomic all property/atom id
+compute         maxid all reduce max c_atomic
 # ------------------------------------------------------------------
 # Output (Run once)
 # ------------------------------------------------------------------
@@ -57,6 +60,9 @@ dump_modify     d1 sort id
 # ループ変数の定義 (m = 1 to 10)
 variable        m loop 10
 
+# 1回目のループで group clear が失敗しないよう、先に空グループを作っておく
+group           N_new empty
+
 label           loop_start
 
     # 連続注入: clear/read_restart は行わず、前回の損傷・注入原子を保持します
@@ -74,10 +80,11 @@ label           loop_start
     variable        y_pos equal random(-4.6,4.6,${rnd_seed_y})
     
     # N原子の生成 (Type 3)
-    # create_atoms直後の総原子数(atoms)を新規原子IDとして扱い、その1個だけに速度を付ける
-    # ※ read_dataでIDが1..N連番かつ delete_atoms 等で欠番を作っていない前提
+    # 追加した「最新の原子ID(max id)」だけをグループ化して、その1個だけに速度を付ける
+    # ※ compute maxid は run/minimize で更新されるため、create_atoms の直後に run 0 で更新する
     create_atoms    3 single ${x_pos} ${y_pos} 200 units box
-    variable        new_id equal atoms
+    run             0
+    variable        new_id equal c_maxid
     group           N_new clear
     group           N_new id ${new_id}
     
