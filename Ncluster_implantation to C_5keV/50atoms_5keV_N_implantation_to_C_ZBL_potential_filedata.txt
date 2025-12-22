@@ -1,0 +1,85 @@
+# ------------------------------------------------------------------
+# Initialization & Substrate Setup (single shot)
+# ------------------------------------------------------------------
+units           metal
+atom_style      atomic
+dimension       3
+boundary        p p p
+
+# Box作成 (基板読み込み前に定義)
+region          mybox0 block -500 500 -500 500 -500 500
+create_box      3 mybox0
+
+# 基板データの読み込み
+# ★注意: 手元のデータファイル名に変更してください
+read_data       diamond_160A_with_vacancies.data add append
+
+# Force field
+pair_style      tersoff/zbl
+pair_coeff      * * diamond_nv.tersoff.zbl C C N
+
+# Neighbor list
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+# グループ定義
+group           C_sub type 1
+group           Fixed_sub type 2
+
+# 基板の初期化（温度設定など）
+velocity        C_sub create 300 12345 mom yes dist gaussian
+velocity        Fixed_sub set 0.0 0.0 0.0
+fix             hold Fixed_sub setforce 0.0 0.0 0.0
+fix             f1 all nve
+
+# ------------------------------------------------------------------
+# N cluster (50 atoms) formation + injection (single shot)
+#   - Ar→Si入力と同様に「sphere + fcc lattice + create_atoms」で生成
+#   - 生成後に余剰が出た場合は削除して“必ず50原子”に揃える
+# ------------------------------------------------------------------
+variable        seed equal 12345
+
+# 照射位置（必要ならここだけ変更）
+variable        x_pos equal 0.0
+variable        y_pos equal 0.0
+variable        z_pos equal 200.0
+
+# クラスター半径（fcc 5.4051 を想定。50個以上できるよう少し大きめに作って50個に揃える）
+variable        r_cluster equal 9.0
+
+region          N_cluster_region sphere ${x_pos} ${y_pos} ${z_pos} ${r_cluster} units box
+lattice         fcc 5.4051
+create_atoms    3 region N_cluster_region
+mass            3 14.0067
+
+group           N_cluster_all type 3
+group           N_cluster random 50 ${seed} N_cluster_all
+group           N_cluster_excess subtract N_cluster_all N_cluster
+delete_atoms    group N_cluster_excess compress yes
+
+# 初速度の付与 (5 keV N, 7° tilt to avoid channeling)
+variable        v_mag equal 2624.3
+variable        tilt_rad equal 7*PI/180
+variable        phi_rad equal random(0.0,360.0,${seed})*PI/180
+variable        vxs equal ${v_mag}*sin(${tilt_rad})*cos(${phi_rad})
+variable        vys equal ${v_mag}*sin(${tilt_rad})*sin(${phi_rad})
+variable        vzs equal -${v_mag}*cos(${tilt_rad})
+velocity        N_cluster set ${vxs} ${vys} ${vzs}
+
+# ------------------------------------------------------------------
+# Run Simulation
+# ------------------------------------------------------------------
+timestep        0.0001
+
+thermo          100
+thermo_style    custom time ke pe etotal temp
+
+dump            d1 all xyz 100 dump_run_1.xyz
+dump_modify     d1 element C_sub Fixed_C N
+
+run             2000
+
+write_data      final_data_run_1.data
+undump          d1
+
+print           "Single N50-cluster implantation completed."
