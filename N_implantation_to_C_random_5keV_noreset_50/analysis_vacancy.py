@@ -34,6 +34,35 @@ def _to_float(token: str) -> float | None:
 def _extract_xyz_from_tokens(tokens: list[str]) -> tuple[float, float, float] | None:
 	if len(tokens) < 3:
 		return None
+
+	# OVITO の vacancy_list などでよくある形式:
+	#   ParticleType  x  y  z  Occupancy
+	# 例: 1 -4.45875 -20.5102 74.0153 0
+	# これを "last 3" で取ると (y, z, occupancy) になってしまうので補正する。
+	if len(tokens) >= 5:
+		t0 = _to_float(tokens[0])
+		last = _to_float(tokens[-1])
+		if t0 is not None and last is not None:
+			is_int_like = abs(t0 - round(t0)) < 1e-9
+			is_occupancy_like = last in {0.0, 1.0}
+			if is_int_like and is_occupancy_like:
+				x = _to_float(tokens[1])
+				y = _to_float(tokens[2])
+				z = _to_float(tokens[3])
+				if x is not None and y is not None and z is not None:
+					return float(x), float(y), float(z)
+
+	# 列数4で occupancy が無い場合: type x y z
+	if len(tokens) >= 4:
+		t0 = _to_float(tokens[0])
+		if t0 is not None and abs(t0 - round(t0)) < 1e-9:
+			x = _to_float(tokens[1])
+			y = _to_float(tokens[2])
+			z = _to_float(tokens[3])
+			if x is not None and y is not None and z is not None:
+				return float(x), float(y), float(z)
+
+	# フォールバック: 行末の3つを座標とみなす（XYZ など）
 	last3 = tokens[-3:]
 	vals = [_to_float(t) for t in last3]
 	if any(v is None for v in vals):
