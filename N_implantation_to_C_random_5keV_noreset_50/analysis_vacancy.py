@@ -181,6 +181,7 @@ def plot_z_histogram(
 	z_values: list[float],
 	out_path: Path,
 	bin_width: float,
+	surface_z: float,
 	show: bool,
 ) -> None:
 	try:
@@ -194,13 +195,17 @@ def plot_z_histogram(
 	if not z_values:
 		raise ValueError("vacancy 座標が空です。")
 
-	z_min = min(z_values)
-	z_max = max(z_values)
+	# 位置計算（coords）はそのままに、描画だけ深さ座標に変換する。
+	# depth = surface_z - z  (例: surface_z=125 Å)
+	x_values = [surface_z - z for z in z_values]
+
+	x_min = min(x_values)
+	x_max = max(x_values)
 	if bin_width <= 0:
 		raise ValueError("bin_width は正の値にしてください。")
 
-	start = math.floor(z_min / bin_width) * bin_width
-	end = math.ceil(z_max / bin_width) * bin_width
+	start = math.floor(x_min / bin_width) * bin_width
+	end = math.ceil(x_max / bin_width) * bin_width
 	if end <= start:
 		end = start + bin_width
 
@@ -212,10 +217,10 @@ def plot_z_histogram(
 		x += bin_width
 
 	plt.figure(figsize=(7, 4))
-	plt.hist(z_values, bins=edges)
-	plt.xlabel("z (Å)")
+	plt.hist(x_values, bins=edges)
+	plt.xlabel(f"depth (Å) = {surface_z:g} - z")
 	plt.ylabel("count")
-	plt.title("Vacancy distribution (histogram along z)")
+	plt.title("Vacancy distribution (histogram along depth)")
 	plt.grid(True, alpha=0.3)
 	plt.margins(x=0)
 	out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -243,7 +248,13 @@ def main() -> None:
 		"--out",
 		type=Path,
 		default=None,
-		help="出力画像パス (default: <input>/vacancy_distribution_z.png)",
+		help="出力画像パス (default: <input>/vacancy_distribution_depth.png)",
+	)
+	parser.add_argument(
+		"--surface-z",
+		type=float,
+		default=125.0,
+		help="深さ座標の基準面 z (Å)。depth = surface_z - z (default: 125)",
 	)
 	parser.add_argument(
 		"--show",
@@ -258,8 +269,14 @@ def main() -> None:
 		return
 
 	z_values = [z for _, _, z in coords]
-	out_path = args.out or (args.vacancy_file.parent / "vacancy_distribution_z.png")
-	plot_z_histogram(z_values, out_path=out_path, bin_width=args.bin_width, show=args.show)
+	out_path = args.out or (args.vacancy_file.parent / "vacancy_distribution_depth.png")
+	plot_z_histogram(
+		z_values,
+		out_path=out_path,
+		bin_width=args.bin_width,
+		surface_z=args.surface_z,
+		show=args.show,
+	)
 
 	mean_dist = mean_pairwise_distance(coords)
 	print("-" * 40)
