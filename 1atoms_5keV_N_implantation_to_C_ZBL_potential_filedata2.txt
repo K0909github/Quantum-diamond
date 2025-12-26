@@ -43,6 +43,7 @@ write_restart   restart.clean_substrate
 
 compute         atomic all property/atom id
 compute         maxid all reduce max c_atomic
+
 # ------------------------------------------------------------------
 # Output (Run once)
 # ------------------------------------------------------------------
@@ -58,55 +59,28 @@ dump_modify     d1 element C_sub Fixed_C N
 dump_modify     d1 sort id
 
 # ------------------------------------------------------------------
-# Loop Start (10 implantations, no substrate reset)
+# Loop Start (50 implantations, no substrate reset)
 # ------------------------------------------------------------------
-# ループ変数の定義 (m = 1 to 10)
-variable        m loop 10
+# ループ変数の定義 (m = 1 to 50)
+variable        m loop 50
 
 # 1回目のループで group clear が失敗しないよう、先に空グループを作っておく
 group           N_new empty
+
+# 50Ncluster_implantation to C_5keV と同じ50座標を、同じ順番で読み出す
+variable        x_inj file coords_50_x.txt
+variable        y_inj file coords_50_y.txt
+variable        z_inj file coords_50_z.txt
 
 label           loop_start
 
     # 連続注入: clear/read_restart は行わず、前回の損傷・注入原子を保持します
     
     # --------------------------------------------------------------
-    # Random Injection Setup
+    # Injection Setup (same coordinates as 50Ncluster)
     # --------------------------------------------------------------
-    # 乱数シード（方位角phiの乱数用）
-    # 10Ncluster_implantation to C_5keV 側と完全一致させるため固定
+    # 乱数シード（方位角phiの乱数用）: 50Ncluster側と完全一致させるため固定
     variable        rnd_seed equal 12345
-
-    # 10Ncluster_implantation to C_5keV と「10個の座標」を完全一致させる
-    # base位置とオフセット距離（クラスター側の variable d と同じ）
-    variable        x_pos equal 0.0
-    variable        y_pos equal 0.0
-    variable        z_pos equal 200.0
-    variable        d equal 1.5
-
-    # m=1..10 の各回で、クラスター側の10個のcreate_atoms座標を順番に使用
-    # （このLAMMPSビルドでは変数式の if() が使えないため、ifコマンドで個別に切り替える）
-    variable        x_inj equal ${x_pos}
-    variable        y_inj equal ${y_pos}
-    variable        z_inj equal ${z_pos}
-
-    # x
-    if "${m}==2"  then "variable x_inj equal ${x_pos}+${d}"
-    if "${m}==3"  then "variable x_inj equal ${x_pos}-${d}"
-    if "${m}==8"  then "variable x_inj equal ${x_pos}+${d}"
-    if "${m}==9"  then "variable x_inj equal ${x_pos}-${d}"
-    if "${m}==10" then "variable x_inj equal ${x_pos}+${d}"
-
-    # y
-    if "${m}==4"  then "variable y_inj equal ${y_pos}+${d}"
-    if "${m}==5"  then "variable y_inj equal ${y_pos}-${d}"
-    if "${m}==8"  then "variable y_inj equal ${y_pos}+${d}"
-    if "${m}==9"  then "variable y_inj equal ${y_pos}+${d}"
-    if "${m}==10" then "variable y_inj equal ${y_pos}-${d}"
-
-    # z
-    if "${m}==6"  then "variable z_inj equal ${z_pos}+${d}"
-    if "${m}==7"  then "variable z_inj equal ${z_pos}-${d}"
     
     # N原子の生成 (Type 3)
     # 追加した「最新の原子ID(max id)」だけをグループ化して、その1個だけに速度を付ける
@@ -119,7 +93,7 @@ label           loop_start
     
     # 初速度の付与 (5keV N, 7° tilt to avoid channeling)
     variable        v_mag equal 2624.3
-    variable        tilt_rad equal 7*PI/180
+    variable        tilt_rad equal 10*PI/180
     variable        phi_rad equal random(0.0,360.0,${rnd_seed})*PI/180
     variable        vxs equal ${v_mag}*sin(${tilt_rad})*cos(${phi_rad})
     variable        vys equal ${v_mag}*sin(${tilt_rad})*sin(${phi_rad})
@@ -134,11 +108,22 @@ label           loop_start
     
     # 結果の保存 (dataファイル)
     write_data      final_data_run_${m}.data
+
+    # 座標ファイルの次行へ（最後のm=50では進めない）
+    if "${m}==50" then "jump SELF loop_last"
+    next            x_inj
+    next            y_inj
+    next            z_inj
     
     # 次のループへ
     next            m
     jump            SELF loop_start
 
+label           loop_last
+    next            m
+
+# Loop End
+
 # Loop End
 undump          d1
-print           "All 10 simulations completed."
+print           "All 50 simulations completed."
