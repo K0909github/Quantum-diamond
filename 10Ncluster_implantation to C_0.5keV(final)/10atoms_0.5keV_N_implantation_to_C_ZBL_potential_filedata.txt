@@ -30,7 +30,6 @@ neigh_modify    every 1 delay 0 check yes
 # グループ定義
 group           C_sub type 1
 group           Fixed_sub type 2
-group           mobile subtract all Fixed_sub
 
 # 基板の初期化（温度設定など）
 velocity        C_sub create 300 12345 mom yes dist gaussian
@@ -71,8 +70,9 @@ create_atoms    3 single $(v_x_pos+v_d) $(v_y_pos-v_d) $(v_z_pos) units box
 
 group           N_cluster type 3
 
-# 初速度の付与 (5 keV N, 7° tilt to avoid channeling)
-variable        v_mag equal 2624.3
+# 初速度の付与 (0.5 keV / atom N, total 5 keV for 10 atoms; 7° tilt to avoid channeling)
+# NOTE: velocity magnitude scales as sqrt(E); 2624.3 (5 keV/atom) -> 829.8765 (0.5 keV/atom)
+variable        v_mag equal 829.8765
 variable        tilt_rad equal 7*PI/180
 variable        phi_rad equal random(0.0,360.0,${seed})*PI/180
 variable        vxs equal ${v_mag}*sin(${tilt_rad})*cos(${phi_rad})
@@ -88,28 +88,10 @@ timestep        0.0001
 thermo          100
 thermo_style    custom time ke pe etotal temp
 
-# Minimization settings (0 K inherent structure)
-min_style       cg
-min_modify      line quadratic
-
 dump            d1 all xyz 100 dump_run_1.xyz
 dump_modify     d1 element C_sub Fixed_C N
 
-run             2000
-
-# ------------------------------------------------------------------
-# Quench thermal vibrations (0 K inherent structure) for OVITO/WS
-#   - zero velocities (optional)
-#   - energy minimization at fixed cell
-#   - output one minimized snapshot with atom IDs
-# ------------------------------------------------------------------
-velocity        mobile set 0.0 0.0 0.0
-minimize        1.0e-10 1.0e-12 10000 100000
-
-dump            dmin all custom 1 dump_run_1_min0K.lammpstrj id type x y z
-dump_modify     dmin sort id
-run             0
-undump          dmin
+run             5000
 
 write_data      final_data_run_1.data
 undump          d1
