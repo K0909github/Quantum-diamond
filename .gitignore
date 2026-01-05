@@ -38,3 +38,5 @@ silicon_anneal_to2000K(3)/*
 # Allowlist specific files within silicon_anneal_to2000K(3)/
 !silicon_anneal_to2000K(3)/explain.txt
 !silicon_anneal_to2000K(3)/in.Si_melt_slide.lmp
+N_implantation_to_C_random_5keV_noreset_10_10(final)/restart.clean_substrate
+10Ncluster_implantation to C_0.5keV(final)/dump_run_1_min0K.lammpstrj
