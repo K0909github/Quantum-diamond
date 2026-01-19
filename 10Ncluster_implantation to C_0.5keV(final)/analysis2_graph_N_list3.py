@@ -227,6 +227,12 @@ def compute_depths(points: list[tuple[float, float, float]]) -> list[float]:
     return [SURFACE_Z - z for (_, _, z) in points]
 
 
+def mean(values: list[float]) -> float:
+    if not values:
+        return math.nan
+    return sum(values) / len(values)
+
+
 def mean_pair_distance(points: list[tuple[float, float, float]]) -> float:
     n = len(points)
     if n < 2:
@@ -286,12 +292,17 @@ def main() -> None:
             continue
 
         mean_distance = mean_pair_distance(pts)
-        print(f"{path}: N={len(depths)} mean_distance={mean_distance:.3f} Å")
+        mean_depth = mean(depths)
+        print(
+            f"{path}: N={len(depths)} mean_depth={mean_depth:.3f} Å mean_distance={mean_distance:.3f} Å"
+        )
         all_depths.extend(depths)
 
     if not all_depths:
         print("有効な N データがありませんでした")
         return
+
+    print(f"ALL: N={len(all_depths)} mean_depth={mean(all_depths):.3f} Å")
 
     try:
         import matplotlib
