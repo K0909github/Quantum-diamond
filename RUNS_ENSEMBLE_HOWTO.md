@@ -40,6 +40,37 @@ python tools/run_ensemble_implantation.py `
   --y-range -20 20
 ```
 
+### WSL/Linux(bash) で実行する場合（重要）
+
+- bash では **改行継続にバッククォート ` は使いません**（PowerShell 用です）。
+- bash の改行継続は **バックスラッシュ `\`** です。
+- 迷ったら、まずは「1行」で実行してください（スペース入りパスは必ずダブルクォート）。
+
+1行版（bash）:
+
+```bash
+python3 tools/run_ensemble_implantation.py --template-dir "10Ncluster_implantation to C_5keV" --input "10atoms_5keV_N_implantation_to_C_ZBL_potential_filedata.txt" --out "10Ncluster_implantation to C_5keV/runs" --runs 10 --seed 12345 --x-range -20 20 --y-range -20 20
+```
+
+複数行版（bash）:
+
+```bash
+python3 tools/run_ensemble_implantation.py \
+  --template-dir "10Ncluster_implantation to C_5keV" \
+  --input "10atoms_5keV_N_implantation_to_C_ZBL_potential_filedata.txt" \
+  --out "10Ncluster_implantation to C_5keV/runs" \
+  --runs 10 \
+  --seed 12345 \
+  --x-range -20 20 \
+  --y-range -20 20
+```
+
+### 例: C_7keV(final) に runs を作って、そのまま10回自動実行（WSL/bash）
+
+```bash
+python3 tools/run_ensemble_implantation.py --template-dir "10Ncluster_implantation to C_7keV(final)" --input "10atoms_7keV_N_implantation_to_C_ZBL_potential_filedata.txt" --out "10Ncluster_implantation to C_7keV(final)/runs" --runs 10 --seed 12345 --x-range -20 20 --y-range -20 20 --lammps "mpirun -np 8 lmp -in in.lmp"
+```
+
 これで `10Ncluster_implantation to C_5keV/runs/run_01/in.lmp` のように生成されます。
 
 ### そのまま LAMMPS も10回回す場合（任意）
@@ -87,3 +118,23 @@ python "10Ncluster_implantation to C_0.5keV(final)/analysis2_graph_N_list3.py" `
 
 - `--x-range/--y-range` は「基板の有効領域（表面の中央付近）」に合わせて調整してください。
 - `--surface-z` は基板モデルの表面 z に合わせてください（いまは既存スクリプトと同じ `125 Å` をデフォルトにしています）。
+
+## エラー対処
+
+### FileNotFoundError: テンプレ入力が見つかりません
+
+原因はほぼ次のどれかです:
+
+- `--template-dir` のフォルダ名が実際と違う（例: `...final` が付いている等）
+- `--input` のファイル名が実際と違う（keV値や `_filedata` の有無など）
+- 実行しているカレントディレクトリがリポジトリルートではない
+
+bash/WSL なら、まず次で「存在する名前」を確認してコピペしてください:
+
+```bash
+pwd
+ls
+ls "10Ncluster_implantation to C_5keV"
+```
+
+その上で、`--template-dir` と `--input` を **実在する名前** に合わせます。

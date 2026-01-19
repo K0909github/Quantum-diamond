@@ -4,12 +4,17 @@
 - LAMMPS dump 形式: 先頭に `ITEM:` があり、`ITEM: ATOMS ...` の後に座標が続く
 - OVITO のテキスト出力風: 先頭に `#` のヘッダ行があり、列に `Position.X Position.Y Position.Z` が含まれる
 
+メモ:
+- LAMMPS dump を直接渡す場合、`--atom-type 3` のように type フィルタを使うと
+    「N 原子だけ」を抽出できます（dump に type 列がある前提）。
+
 深さは `depth = SURFACE_Z - z` (Å) と定義する。
 グラフは深さヒストグラムのみを保存し、N-N 平均距離は数値だけ出力する。
 """
 
 from __future__ import annotations
 
+import argparse
 import math
 from pathlib import Path
 import shlex
@@ -19,7 +24,59 @@ SURFACE_Z = 125.0  # Å  (diamond_substrate_250Å の上面)
 BIN_WIDTH = 5  # Å
 
 
-def _read_positions_from_lammps_dump(path: Path) -> list[tuple[float, float, float]]:
+def _candidate_n_files_in_dir(data_dir: Path) -> list[Path]:
+    return [
+        data_dir / "N_list",
+        data_dir / "N_list.txt",
+        data_dir / "N_list.xyz",
+    ]
+
+
+def _resolve_inputs(raw_inputs: list[str] | None) -> list[Path]:
+    if not raw_inputs:
+        # 従来互換: スクリプトと同じフォルダの N_list
+        data_dir = Path(__file__).parent
+        for cand in _candidate_n_files_in_dir(data_dir):
+            if cand.exists():
+                return [cand]
+        return []
+
+    resolved: list[Path] = []
+    for raw in raw_inputs:
+        p = Path(raw)
+
+        if p.is_dir():
+            hit = next((c for c in _candidate_n_files_in_dir(p) if c.exists()), None)
+            if hit is not None:
+                resolved.append(hit)
+            continue
+
+        if p.exists():
+            resolved.append(p)
+            continue
+
+        parent = p.parent if str(p.parent) else Path(".")
+        pattern = p.name
+        for m in sorted(parent.glob(pattern)):
+            if m.is_dir():
+                hit = next((c for c in _candidate_n_files_in_dir(m) if c.exists()), None)
+                if hit is not None:
+                    resolved.append(hit)
+            elif m.exists():
+                resolved.append(m)
+
+    uniq: list[Path] = []
+    seen: set[Path] = set()
+    for p in resolved:
+        rp = p.resolve()
+        if rp in seen:
+            continue
+        seen.add(rp)
+        uniq.append(p)
+    return uniq
+
+
+def _read_positions_from_lammps_dump(path: Path, atom_type: int | None) -> list[tuple[float, float, float]]:
     """LAMMPS dump 形式から (x, y, z) を読む。
 
     複数スナップショットが入っている場合は、最後の ITEM: ATOMS ブロックを採用する。
@@ -29,6 +86,7 @@ def _read_positions_from_lammps_dump(path: Path) -> list[tuple[float, float, flo
     current: list[tuple[float, float, float]] = []
     reading = False
     x_idx = y_idx = z_idx = None
+    type_idx: int | None = None
 
     for raw_line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
         line = raw_line.strip()
@@ -45,6 +103,7 @@ def _read_positions_from_lammps_dump(path: Path) -> list[tuple[float, float, flo
                     z_idx = col_l.index("z")
                 except ValueError:
                     x_idx = y_idx = z_idx = None
+                type_idx = col_l.index("type") if "type" in col_l else None
                 current = []
                 reading = True
             else:
@@ -59,6 +118,16 @@ def _read_positions_from_lammps_dump(path: Path) -> list[tuple[float, float, flo
         tokens = line.split()
         if len(tokens) <= max(x_idx, y_idx, z_idx):
             continue
+
+        if atom_type is not None and type_idx is not None:
+            if len(tokens) <= type_idx:
+                continue
+            try:
+                t = int(float(tokens[type_idx]))
+            except ValueError:
+                continue
+            if t != atom_type:
+                continue
         try:
             x = float(tokens[x_idx])
             y = float(tokens[y_idx])
@@ -127,7 +196,7 @@ def _read_positions_from_ovito_table(path: Path) -> list[tuple[float, float, flo
     return positions
 
 
-def read_positions(path: Path) -> list[tuple[float, float, float]]:
+def read_positions(path: Path, atom_type: int | None = None) -> list[tuple[float, float, float]]:
     """`N_list`の入力形式を自動判別して (x, y, z) を返す。"""
 
     # 先頭の有効行だけ見て形式を判定
@@ -143,12 +212,12 @@ def read_positions(path: Path) -> list[tuple[float, float, float]]:
         return []
 
     if first_meaningful.startswith("ITEM:"):
-        return _read_positions_from_lammps_dump(path)
+        return _read_positions_from_lammps_dump(path, atom_type=atom_type)
     if first_meaningful.startswith("#"):
         return _read_positions_from_ovito_table(path)
 
     # どちらでもない場合は、従来互換のためdumpとして一応試す
-    pts = _read_positions_from_lammps_dump(path)
+    pts = _read_positions_from_lammps_dump(path, atom_type=atom_type)
     if pts:
         return pts
     return _read_positions_from_ovito_table(path)
@@ -178,24 +247,51 @@ def mean_pair_distance(points: list[tuple[float, float, float]]) -> float:
 
 
 def main() -> None:
+    global SURFACE_Z, BIN_WIDTH
+
+    parser = argparse.ArgumentParser(description="N_list から N 原子の注入深さ分布をヒストグラム表示する")
+    parser.add_argument(
+        "inputs",
+        nargs="*",
+        help=(
+            "入力ファイル/フォルダ/ワイルドカード（複数指定可）。"
+            "フォルダ指定の場合は N_list / N_list.txt / N_list.xyz を自動探索。"
+            "未指定なら、このスクリプトと同じフォルダから探します。"
+        ),
+    )
+    parser.add_argument("--surface-z", type=float, default=SURFACE_Z, help="表面 z 座標 (Å)")
+    parser.add_argument("--bin-width", type=float, default=float(BIN_WIDTH), help="ビン幅 (Å)")
+    parser.add_argument("--atom-type", type=int, default=None, help="LAMMPS dump の type フィルタ（例: N=3）")
+    parser.add_argument("--out", type=str, default="nitrogen_depths.png", help="出力画像名")
+    args = parser.parse_args()
+    SURFACE_Z = float(args.surface_z)
+    BIN_WIDTH = float(args.bin_width)
+
     data_dir = Path(__file__).parent
-    path = data_dir / "N_list"
-    if not path.exists():
-        print("N_list が見つかりません")
+    paths = _resolve_inputs(args.inputs)
+    if not paths:
+        print("N_list 入力が見つかりません（ファイル/フォルダ/パターンを指定してください）")
         return
 
-    pts = read_positions(path)
-    if not pts:
-        print("N 座標が読み取れませんでした")
-        return
+    all_depths: list[float] = []
+    for path in paths:
+        pts = read_positions(path, atom_type=args.atom_type)
+        if not pts:
+            print(f"skip: {path} (N 座標が読み取れません)")
+            continue
 
-    depths = [d for d in compute_depths(pts) if d >= 0.0]
-    if not depths:
-        print("深さ(depth)が計算できませんでした")
-        return
+        depths = [d for d in compute_depths(pts) if d >= 0.0]
+        if not depths:
+            print(f"skip: {path} (深さ(depth)が計算できません)")
+            continue
 
-    mean_distance = mean_pair_distance(pts)
-    print(f"{path.name}: N={len(depths)} mean_distance={mean_distance:.3f} Å")
+        mean_distance = mean_pair_distance(pts)
+        print(f"{path}: N={len(depths)} mean_distance={mean_distance:.3f} Å")
+        all_depths.extend(depths)
+
+    if not all_depths:
+        print("有効な N データがありませんでした")
+        return
 
     try:
         import matplotlib
@@ -206,21 +302,21 @@ def main() -> None:
         print("matplotlib が必要です: pip install matplotlib")
         return
 
-    max_depth = max(depths)
+    max_depth = max(all_depths)
     xmax = int(math.ceil(max_depth / BIN_WIDTH) * BIN_WIDTH)
     edges = list(range(0, xmax + BIN_WIDTH, BIN_WIDTH))
 
     plt.figure(figsize=(7, 4))
-    plt.hist(depths, bins=edges, range=(0.0, float(xmax)))
+    plt.hist(all_depths, bins=edges, range=(0.0, float(xmax)))
     plt.xlim(0.0, float(xmax))
     plt.xlabel("nitrogen depth (Å)")
     plt.ylabel("count")
-    plt.title("Nitrogen depth histogram")
+    plt.title(f"Nitrogen depth histogram (n={len(all_depths)})")
     plt.grid(True, alpha=0.3)
     plt.margins(x=0)
     plt.tight_layout()
 
-    out_path = data_dir / "nitrogen_depths.png"
+    out_path = data_dir / args.out
     plt.savefig(out_path, dpi=200)
     print(f"Saved: {out_path}")
 
