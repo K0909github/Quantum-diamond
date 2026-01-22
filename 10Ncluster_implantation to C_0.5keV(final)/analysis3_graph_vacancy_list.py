@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import math
 import shlex
 from pathlib import Path
@@ -124,6 +125,19 @@ def _resolve_inputs(raw_inputs: list[str] | None) -> list[Path]:
 
     resolved: list[Path] = []
     for raw in raw_inputs:
+        # run_*/... のようにディレクトリ側にワイルドカードがある場合も扱えるように、先にglob展開する。
+        if any(ch in raw for ch in ["*", "?", "[", "]"]):
+            matches = sorted(glob.glob(raw, recursive=True))
+            for m in matches:
+                mp = Path(m)
+                if mp.is_dir():
+                    hit = next((c for c in _candidate_files_in_dir(mp) if c.exists()), None)
+                    if hit is not None:
+                        resolved.append(hit)
+                elif mp.exists():
+                    resolved.append(mp)
+            continue
+
         p = Path(raw)
 
         if p.is_dir():
@@ -228,7 +242,9 @@ def main() -> None:
     plt.margins(x=0)
     plt.tight_layout()
 
-    out_path = data_dir / args.out
+    out_arg = Path(args.out)
+    out_path = out_arg if out_arg.is_absolute() else (data_dir / out_arg)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_path, dpi=200)
     print(f"Saved: {out_path}")
 

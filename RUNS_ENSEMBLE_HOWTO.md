@@ -101,7 +101,22 @@ python "10Ncluster_implantation to C_0.5keV(final)/analysis3_graph_vacancy_list.
   --bin-width 1
 ```
 
+Ubuntu/WSL(bash) 例（C_7keV(final) の runs から出す）:
+
+```bash
+python3 "10Ncluster_implantation to C_0.5keV(final)/analysis3_graph_vacancy_list.py" \
+  "10Ncluster_implantation to C_7keV(final)/runs/run_*" \
+  --out "10Ncluster_implantation to C_7keV(final)/runs/vacancy_depths_ensemble.png" \
+  --surface-z 125 \
+  --bin-width 1
+```
+
 ## 3) N の深さ分布（10回分をまとめて）
+
+注意:
+
+- このスクリプトは **引数なし**で実行すると「スクリプトと同じフォルダ」にある `N_list` を探します。
+- runs 配下のデータで分布を作る場合は、必ず `run_*/...` の **入力パターンを引数として渡してください**。
 
 `dump_run_1_min0K.lammpstrj` を直接読む例（N が type=3 の場合）:
 
@@ -112,6 +127,29 @@ python "10Ncluster_implantation to C_0.5keV(final)/analysis2_graph_N_list3.py" `
   --out "nitrogen_depths_ensemble.png" `
   --surface-z 125 `
   --bin-width 5
+```
+
+Ubuntu/WSL(bash) 例（C_7keV(final) の runs から出す）:
+
+```bash
+python3 "10Ncluster_implantation to C_0.5keV(final)/analysis2_graph_N_list3.py" \
+  "10Ncluster_implantation to C_7keV(final)/runs/run_*/dump_run_1_min0K.lammpstrj" \
+  --atom-type 3 \
+  --out "10Ncluster_implantation to C_7keV(final)/runs/nitrogen_depths_ensemble.png" \
+  --surface-z 125 \
+  --bin-width 5
+```
+
+補足:
+
+- パスにスペースがあるので、`run_*/...` の引数はダブルクォートで囲んでOKです。
+  その場合でもスクリプト側でワイルドカードを展開して読み込みます。
+
+事前確認（ファイルが本当にあるか）:
+
+```bash
+ls "10Ncluster_implantation to C_7keV(final)/runs/run_01"
+ls "10Ncluster_implantation to C_7keV(final)/runs/run_01/dump_run_1_min0K.lammpstrj"
 ```
 
 ## よくある調整ポイント
@@ -138,3 +176,28 @@ ls "10Ncluster_implantation to C_5keV"
 ```
 
 その上で、`--template-dir` と `--input` を **実在する名前** に合わせます。
+
+### 分布（グラフ出力）でエラーが出る
+
+まず、どのエラーでも共通で次を確認してください:
+
+```bash
+# リポジトリルートにいるか確認
+pwd
+ls
+
+# runフォルダに必要ファイルがあるか確認（例: run_01）
+ls "10Ncluster_implantation to C_7keV(final)/runs/run_01"
+```
+
+よくある原因:
+
+- `ModuleNotFoundError: No module named 'matplotlib'`
+  - 対処: `python3 -m pip install --user matplotlib`
+- `...入力が見つかりません`（vacancy_list / dump が無い）
+  - N分布: 各runに `dump_run_1_min0K.lammpstrj` があるか確認
+  - vacancy分布: 各runに `vacancy_list`（または vacancy_list.xyz 等）が必要です（OVITO等でrunごとに出力）
+- パスにスペースがある
+  - 対処: 文字列は必ずダブルクォートで囲む（例: `"10Ncluster_implantation to C_7keV(final)/..."`）
+
+こちらで原因を特定するため、エラーが出たときは「実行したコマンド」と「Traceback全文」をそのまま貼ってください。

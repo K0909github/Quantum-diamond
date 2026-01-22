@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import argparse
+import glob
 import math
 from pathlib import Path
 import shlex
@@ -43,6 +44,20 @@ def _resolve_inputs(raw_inputs: list[str] | None) -> list[Path]:
 
     resolved: list[Path] = []
     for raw in raw_inputs:
+        # run_*/... のようにディレクトリ側にワイルドカードがある場合は pathlib だけだと扱いにくいので、
+        # 文字列globで先に展開する。
+        if any(ch in raw for ch in ["*", "?", "[", "]"]):
+            matches = sorted(glob.glob(raw, recursive=True))
+            for m in matches:
+                mp = Path(m)
+                if mp.is_dir():
+                    hit = next((c for c in _candidate_n_files_in_dir(mp) if c.exists()), None)
+                    if hit is not None:
+                        resolved.append(hit)
+                elif mp.exists():
+                    resolved.append(mp)
+            continue
+
         p = Path(raw)
 
         if p.is_dir():
@@ -314,8 +329,16 @@ def main() -> None:
         return
 
     max_depth = max(all_depths)
-    xmax = int(math.ceil(max_depth / BIN_WIDTH) * BIN_WIDTH)
-    edges = list(range(0, xmax + BIN_WIDTH, BIN_WIDTH))
+    bin_width = float(BIN_WIDTH)
+    if bin_width <= 0:
+        raise ValueError("--bin-width must be > 0")
+
+    xmax = math.ceil(max_depth / bin_width) * bin_width
+    # 浮動小数の丸め誤差対策（例: 25.0000000004）
+    xmax = round(float(xmax), 10)
+    n_bins = int(round(xmax / bin_width))
+    edges = [i * bin_width for i in range(n_bins + 1)]
+    edges[-1] = xmax
 
     plt.figure(figsize=(7, 4))
     plt.hist(all_depths, bins=edges, range=(0.0, float(xmax)))
@@ -327,7 +350,9 @@ def main() -> None:
     plt.margins(x=0)
     plt.tight_layout()
 
-    out_path = data_dir / args.out
+    out_arg = Path(args.out)
+    out_path = out_arg if out_arg.is_absolute() else (data_dir / out_arg)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_path, dpi=200)
     print(f"Saved: {out_path}")
 
