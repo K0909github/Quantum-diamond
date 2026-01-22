@@ -284,6 +284,12 @@ def main() -> None:
     parser.add_argument("--bin-width", type=float, default=float(BIN_WIDTH), help="ビン幅 (Å)")
     parser.add_argument("--atom-type", type=int, default=None, help="LAMMPS dump の type フィルタ（例: N=3）")
     parser.add_argument("--out", type=str, default="nitrogen_depths.png", help="出力画像名")
+    parser.add_argument(
+        "--max-depth",
+        type=float,
+        default=None,
+        help="ヒストグラム表示の最大深さ (Å)（例: 基板厚=250なら --max-depth 250）",
+    )
     args = parser.parse_args()
     SURFACE_Z = float(args.surface_z)
     BIN_WIDTH = float(args.bin_width)
@@ -319,6 +325,19 @@ def main() -> None:
 
     print(f"ALL: N={len(all_depths)} mean_depth={mean(all_depths):.3f} Å")
 
+    depths_for_plot = all_depths
+    if args.max_depth is not None:
+        max_depth_limit = float(args.max_depth)
+        if max_depth_limit <= 0:
+            raise ValueError("--max-depth must be > 0")
+        depths_for_plot = [d for d in all_depths if d <= max_depth_limit]
+        removed = len(all_depths) - len(depths_for_plot)
+        if removed:
+            print(f"NOTE: depth > {max_depth_limit:g} Å を {removed} 個、描画から除外しました")
+        if not depths_for_plot:
+            print("NOTE: 描画対象のデータが空です（--max-depth が小さすぎる可能性）")
+            return
+
     try:
         import matplotlib
 
@@ -328,7 +347,7 @@ def main() -> None:
         print("matplotlib が必要です: pip install matplotlib")
         return
 
-    max_depth = max(all_depths)
+    max_depth = max(depths_for_plot)
     bin_width = float(BIN_WIDTH)
     if bin_width <= 0:
         raise ValueError("--bin-width must be > 0")
@@ -341,7 +360,7 @@ def main() -> None:
     edges[-1] = xmax
 
     plt.figure(figsize=(7, 4))
-    plt.hist(all_depths, bins=edges, range=(0.0, float(xmax)))
+    plt.hist(depths_for_plot, bins=edges, range=(0.0, float(xmax)))
     plt.xlim(0.0, float(xmax))
     plt.xlabel("nitrogen depth (Å)")
     plt.ylabel("count")

@@ -126,7 +126,8 @@ python "10Ncluster_implantation to C_0.5keV(final)/analysis2_graph_N_list3.py" `
   --atom-type 3 `
   --out "nitrogen_depths_ensemble.png" `
   --surface-z 125 `
-  --bin-width 5
+  --bin-width 5 `
+  --max-depth 250
 ```
 
 Ubuntu/WSL(bash) 例（C_7keV(final) の runs から出す）:
@@ -137,13 +138,15 @@ python3 "10Ncluster_implantation to C_0.5keV(final)/analysis2_graph_N_list3.py" 
   --atom-type 3 \
   --out "10Ncluster_implantation to C_7keV(final)/runs/nitrogen_depths_ensemble.png" \
   --surface-z 125 \
-  --bin-width 5
+  --bin-width 5 \
+  --max-depth 250
 ```
 
 補足:
 
 - パスにスペースがあるので、`run_*/...` の引数はダブルクォートで囲んでOKです。
   その場合でもスクリプト側でワイルドカードを展開して読み込みます。
+- `--max-depth 250` を付けると、基板厚（例: 250Å）より深い値（底から抜けた原子など）を描画から除外できます。
 
 事前確認（ファイルが本当にあるか）:
 
