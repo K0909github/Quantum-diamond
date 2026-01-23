@@ -102,6 +102,28 @@ python tools/run_ensemble_implantation.py `
 - このテンプレは `x_pos/y_pos` を入力内で `random(...)` で決めます（Python側で `x-range/y-range` を渡す方式ではありません）。
 - `12345+${m}` / `67890+${m}` の「12345/67890」を run ごとに変えると、10回注入の乱数系列が run ごとに変わります。
 
+### まずはこれ（おすすめ）: run_ensemble_implantation.py で一発
+
+`--template-style loop-random-xy` を使うと、連続注入テンプレ内の
+
+- `rnd_seed` / `rnd_seed_y` の基準値
+- `x_pos` / `y_pos` の `random(xmin,xmax,...)` の範囲
+
+を run ごとに差し替えた `run_01..run_10` を作り、そのまま LAMMPS まで実行できます。
+
+```bash
+python3 tools/run_ensemble_implantation.py \
+  --template-style loop-random-xy \
+  --template-dir "N_implantation_to_C_random_5keV_noreset_10_10(final)" \
+  --input "1atoms_5keV_N_implantation_to_C_ZBL_potential_filedata.txt" \
+  --out "N_implantation_to_C_random_5keV_noreset_10_10(final)/runs_ensemble" \
+  --runs 10 \
+  --seed 12345 \
+  --x-range -4.6 4.6 \
+  --y-range -4.6 4.6 \
+  --lammps "mpirun -np 8 lmp -in in.lmp"
+```
+
 ### PowerShell 例（run_01..run_10 を作って順に実行）
 
 ```powershell

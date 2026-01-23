@@ -47,7 +47,28 @@ class RunSpec:
     y_pos: float
 
 
+@dataclass(frozen=True)
+class RunSpecLoopRandomXY:
+    index: int
+    seed_x_base: int
+    seed_y_base: int
+    xmin: float
+    xmax: float
+    ymin: float
+    ymax: float
+    loop_var: str = "m"
+
+
 _VAR_RE = re.compile(r"^(?P<indent>\s*)variable\s+(?P<name>seed|x_pos|y_pos)\s+equal\s+.*$", re.IGNORECASE)
+
+_VAR_RND_SEED_RE = re.compile(r"^(?P<indent>\s*)variable\s+rnd_seed\s+equal\s+.*$", re.IGNORECASE)
+_VAR_RND_SEED_Y_RE = re.compile(r"^(?P<indent>\s*)variable\s+rnd_seed_y\s+equal\s+.*$", re.IGNORECASE)
+_VAR_X_POS_RANDOM_RE = re.compile(
+    r"^(?P<indent>\s*)variable\s+x_pos\s+equal\s+random\(.*\)\s*$", re.IGNORECASE
+)
+_VAR_Y_POS_RANDOM_RE = re.compile(
+    r"^(?P<indent>\s*)variable\s+y_pos\s+equal\s+random\(.*\)\s*$", re.IGNORECASE
+)
 
 
 def _read_text(path: Path) -> str:
@@ -91,6 +112,74 @@ def _patch_lammps_input(template_text: str, run: RunSpec) -> str:
     return "\n".join(out_lines) + "\n"
 
 
+def _patch_lammps_input_loop_random_xy(template_text: str, run: RunSpecLoopRandomXY) -> str:
+    """連続注入(noreset)系テンプレ用: x_pos/y_pos を入力内の random() で決めるタイプをパッチする。
+
+    期待する行（例）:
+      variable        rnd_seed equal 12345+${m}
+      variable        rnd_seed_y equal 67890+${m}
+      variable        x_pos equal random(-4.6,4.6,${rnd_seed})
+      variable        y_pos equal random(-4.6,4.6,${rnd_seed_y})
+
+    これらの「基準seed」と random 範囲だけを run ごとに変える。
+    """
+
+    replaced = {
+        "rnd_seed": False,
+        "rnd_seed_y": False,
+        "x_pos": False,
+        "y_pos": False,
+    }
+
+    loop_ref = "${" + run.loop_var + "}"
+    seed_ref_x = "${rnd_seed}"
+    seed_ref_y = "${rnd_seed_y}"
+
+    out_lines: list[str] = []
+    for raw_line in template_text.splitlines(keepends=False):
+        m = _VAR_RND_SEED_RE.match(raw_line)
+        if m:
+            indent = m.group("indent")
+            out_lines.append(f"{indent}variable        rnd_seed equal {run.seed_x_base}+{loop_ref}")
+            replaced["rnd_seed"] = True
+            continue
+
+        m = _VAR_RND_SEED_Y_RE.match(raw_line)
+        if m:
+            indent = m.group("indent")
+            out_lines.append(f"{indent}variable        rnd_seed_y equal {run.seed_y_base}+{loop_ref}")
+            replaced["rnd_seed_y"] = True
+            continue
+
+        m = _VAR_X_POS_RANDOM_RE.match(raw_line)
+        if m:
+            indent = m.group("indent")
+            out_lines.append(
+                f"{indent}variable        x_pos equal random({run.xmin},{run.xmax},{seed_ref_x})"
+            )
+            replaced["x_pos"] = True
+            continue
+
+        m = _VAR_Y_POS_RANDOM_RE.match(raw_line)
+        if m:
+            indent = m.group("indent")
+            out_lines.append(
+                f"{indent}variable        y_pos equal random({run.ymin},{run.ymax},{seed_ref_y})"
+            )
+            replaced["y_pos"] = True
+            continue
+
+        out_lines.append(raw_line)
+
+    missing = [k for k, v in replaced.items() if not v]
+    if missing:
+        raise ValueError(
+            "テンプレ入力に必要な variable 行が見つかりません(loop-random-xy): " + ", ".join(missing)
+        )
+
+    return "\n".join(out_lines) + "\n"
+
+
 def _copy_files(src_dir: Path, dst_dir: Path, patterns: Iterable[str]) -> None:
     dst_dir.mkdir(parents=True, exist_ok=True)
     for pat in patterns:
@@ -111,6 +200,16 @@ def main() -> None:
     parser.add_argument("--template-dir", required=True, help="テンプレがあるフォルダ")
     parser.add_argument("--input", required=True, help="テンプレ入力ファイル名（template-dir内）")
     parser.add_argument("--out", required=True, help="出力先フォルダ（run_01等を作る）")
+    parser.add_argument(
+        "--template-style",
+        type=str,
+        choices=["simple", "loop-random-xy"],
+        default="simple",
+        help=(
+            "テンプレの形式。simple=variable seed/x_pos/y_pos を直接上書き。"
+            "loop-random-xy=入力内で x_pos/y_pos を random() で決める連続注入(noreset)テンプレ用。"
+        ),
+    )
     parser.add_argument("--runs", type=int, default=10, help="試行回数")
     parser.add_argument("--seed", type=int, default=12345, help="乱数の基準seed")
     parser.add_argument("--x-range", type=float, nargs=2, default=[-20.0, 20.0], metavar=("XMIN", "XMAX"))
@@ -163,18 +262,39 @@ def main() -> None:
 
     template_text = _read_text(template_input)
 
-    runs: list[RunSpec] = []
+    runs_simple: list[RunSpec] = []
+    runs_loop: list[RunSpecLoopRandomXY] = []
     for i in range(1, int(args.runs) + 1):
-        x = rng.uniform(xmin, xmax)
-        y = rng.uniform(ymin, ymax)
-        seed_i = int(args.seed) + i
-        runs.append(RunSpec(index=i, seed=seed_i, x_pos=x, y_pos=y))
+        if args.template_style == "simple":
+            x = rng.uniform(xmin, xmax)
+            y = rng.uniform(ymin, ymax)
+            seed_i = int(args.seed) + i
+            runs_simple.append(RunSpec(index=i, seed=seed_i, x_pos=x, y_pos=y))
+        else:
+            # 連続注入テンプレ側の loop(m) 内で seed を m に応じて変えるため、ここでは「基準値」だけをrunごとにずらす。
+            # x/y の乱数系列が独立になるよう、y側は大きくオフセットする。
+            seed_x_base = int(args.seed) + 1000 * i
+            seed_y_base = int(args.seed) + 50000 + 1000 * i
+            runs_loop.append(
+                RunSpecLoopRandomXY(
+                    index=i,
+                    seed_x_base=seed_x_base,
+                    seed_y_base=seed_y_base,
+                    xmin=xmin,
+                    xmax=xmax,
+                    ymin=ymin,
+                    ymax=ymax,
+                )
+            )
 
     lammps_cmd: list[str] | None = None
     if args.lammps:
         lammps_cmd = _parse_lammps_cmd(args.lammps)
 
-    for run in runs:
+    run_list: list[RunSpec | RunSpecLoopRandomXY]
+    run_list = runs_simple if args.template_style == "simple" else runs_loop
+
+    for run in run_list:
         run_dir = out_root / f"run_{run.index:02d}"
         run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -182,17 +302,33 @@ def main() -> None:
         _copy_files(template_dir, run_dir, args.copy)
 
         # 入力ファイルを書き出し
-        patched = _patch_lammps_input(template_text, run)
+        if isinstance(run, RunSpecLoopRandomXY):
+            patched = _patch_lammps_input_loop_random_xy(template_text, run)
+        else:
+            patched = _patch_lammps_input(template_text, run)
         in_path = run_dir / "in.lmp"
         _write_text(in_path, patched)
 
         # メモも残す
-        _write_text(
-            run_dir / "run_params.txt",
-            f"index={run.index}\nseed={run.seed}\nx_pos={run.x_pos}\ny_pos={run.y_pos}\n",
-        )
-
-        print(f"Prepared: {run_dir} (seed={run.seed}, x={run.x_pos:.3f}, y={run.y_pos:.3f})")
+        if isinstance(run, RunSpecLoopRandomXY):
+            _write_text(
+                run_dir / "run_params.txt",
+                (
+                    f"index={run.index}\n"
+                    f"seed_x_base={run.seed_x_base}\nseed_y_base={run.seed_y_base}\n"
+                    f"x_range={run.xmin},{run.xmax}\ny_range={run.ymin},{run.ymax}\n"
+                ),
+            )
+            print(
+                f"Prepared: {run_dir} (seed_x_base={run.seed_x_base}, seed_y_base={run.seed_y_base}, "
+                f"x=[{run.xmin:.3f},{run.xmax:.3f}], y=[{run.ymin:.3f},{run.ymax:.3f}])"
+            )
+        else:
+            _write_text(
+                run_dir / "run_params.txt",
+                f"index={run.index}\nseed={run.seed}\nx_pos={run.x_pos}\ny_pos={run.y_pos}\n",
+            )
+            print(f"Prepared: {run_dir} (seed={run.seed}, x={run.x_pos:.3f}, y={run.y_pos:.3f})")
 
         if lammps_cmd is not None:
             print(f"Running LAMMPS in {run_dir} ...")
