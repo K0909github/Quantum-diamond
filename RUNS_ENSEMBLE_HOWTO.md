@@ -89,6 +89,87 @@ python tools/run_ensemble_implantation.py `
   --lammps "lmp -in in.lmp"
 ```
 
+## 1b) 連続注入（noreset, 10回注入）をさらに ensemble で10回回す
+
+例: `N_implantation_to_C_random_5keV_noreset_10_10(final)/1atoms_5keV_N_implantation_to_C_ZBL_potential_filedata.txt`
+
+このタイプのテンプレは **LAMMPS入力の中で `variable m loop 10` のように「10回の連続注入」を自前で回す**作りになっています。
+なので「10回連続注入」を **さらに** ensemble で10回（= 10注入×10run）やるには、
+テンプレを `run_01 .. run_10` に複製して **各runで乱数の基準seed（例: 12345/67890）だけを変えて** LAMMPS を実行するのが簡単です。
+
+ポイント:
+
+- このテンプレは `x_pos/y_pos` を入力内で `random(...)` で決めます（Python側で `x-range/y-range` を渡す方式ではありません）。
+- `12345+${m}` / `67890+${m}` の「12345/67890」を run ごとに変えると、10回注入の乱数系列が run ごとに変わります。
+
+### PowerShell 例（run_01..run_10 を作って順に実行）
+
+```powershell
+$templateDir = "N_implantation_to_C_random_5keV_noreset_10_10(final)"
+$templateIn  = "1atoms_5keV_N_implantation_to_C_ZBL_potential_filedata.txt"
+$outRoot     = "N_implantation_to_C_random_5keV_noreset_10_10(final)/runs_ensemble"
+
+New-Item -ItemType Directory -Force $outRoot | Out-Null
+
+for ($i=1; $i -le 10; $i++) {
+  $runDir = Join-Path $outRoot ("run_{0:D2}" -f $i)
+  New-Item -ItemType Directory -Force $runDir | Out-Null
+
+  # テンプレフォルダから必要ファイルをコピー（状況に応じて追加）
+  Copy-Item -Force (Join-Path $templateDir "*.data")   $runDir -ErrorAction SilentlyContinue
+  Copy-Item -Force (Join-Path $templateDir "*.zbl")    $runDir -ErrorAction SilentlyContinue
+  Copy-Item -Force (Join-Path $templateDir "*.tersoff*") $runDir -ErrorAction SilentlyContinue
+
+  # 入力ファイルを in.lmp として複製し、seed基準を run ごとに変更
+  $text = Get-Content (Join-Path $templateDir $templateIn) -Raw
+  $seedBaseX = 12345 + 1000*$i
+  $seedBaseY = 67890 + 1000*$i
+  $text = $text.Replace("variable        rnd_seed equal 12345+${m}",  "variable        rnd_seed equal $seedBaseX+${m}")
+  $text = $text.Replace("variable        rnd_seed_y equal 67890+${m}","variable        rnd_seed_y equal $seedBaseY+${m}")
+  Set-Content -Path (Join-Path $runDir "in.lmp") -Value $text -Encoding utf8
+
+  # 実行（LAMMPSコマンドは環境に合わせて）
+  Push-Location $runDir
+  # 例: mpirun / lmp は環境で調整
+  mpirun -np 8 lmp -in in.lmp
+  Pop-Location
+}
+```
+
+### WSL/Linux(bash) 例（run_01..run_10 を作って順に実行）
+
+```bash
+template_dir="N_implantation_to_C_random_5keV_noreset_10_10(final)"
+template_in="1atoms_5keV_N_implantation_to_C_ZBL_potential_filedata.txt"
+out_root="N_implantation_to_C_random_5keV_noreset_10_10(final)/runs_ensemble"
+
+mkdir -p "$out_root"
+
+for i in $(seq -w 1 10); do
+  run_dir="$out_root/run_$i"
+  mkdir -p "$run_dir"
+
+  cp -f "$template_dir"/*.data "$run_dir" 2>/dev/null || true
+  cp -f "$template_dir"/*.zbl "$run_dir" 2>/dev/null || true
+  cp -f "$template_dir"/*.tersoff* "$run_dir" 2>/dev/null || true
+
+  seed_base_x=$((12345 + 1000*10#$i))
+  seed_base_y=$((67890 + 1000*10#$i))
+
+  sed \
+    -e "s/variable        rnd_seed equal 12345+\${m}/variable        rnd_seed equal ${seed_base_x}+\${m}/" \
+    -e "s/variable        rnd_seed_y equal 67890+\${m}/variable        rnd_seed_y equal ${seed_base_y}+\${m}/" \
+    "$template_dir/$template_in" > "$run_dir/in.lmp"
+
+  (cd "$run_dir" && mpirun -np 8 lmp -in in.lmp)
+done
+```
+
+調整したい場合:
+
+- 位置の範囲はテンプレ内の `random(-4.6,4.6,...)` を基板サイズに合わせて調整してください。
+- 各runが `dump_all.xyz` や `final_data_run_*.data` を出します（runフォルダ分けしているので上書きはしません）。
+
 ## 2) vacancy の深さ分布（10回分をまとめて）
 
 `run_*` をフォルダ指定で渡せます:
