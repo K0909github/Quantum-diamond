@@ -23,6 +23,7 @@ import shlex
 
 SURFACE_Z = 125.0  # Å  (diamond_substrate_250Å の上面)
 BIN_WIDTH = 5  # Å
+DEFAULT_MAX_DEPTH = 250.0  # Å  (基板厚)
 
 
 def _candidate_n_files_in_dir(data_dir: Path) -> list[Path]:
@@ -287,12 +288,28 @@ def main() -> None:
     parser.add_argument(
         "--max-depth",
         type=float,
-        default=None,
-        help="ヒストグラム表示の最大深さ (Å)（例: 基板厚=250なら --max-depth 250）",
+        default=DEFAULT_MAX_DEPTH,
+        help=(
+            "深さの最大値 (Å)。この上限は描画だけでなく平均計算/集計にも適用します。"
+            "（既定: 250）"
+        ),
+    )
+    parser.add_argument(
+        "--no-max-depth",
+        action="store_true",
+        help="深さ上限を無効化（描画/平均ともに全データを使用）",
     )
     args = parser.parse_args()
     SURFACE_Z = float(args.surface_z)
     BIN_WIDTH = float(args.bin_width)
+
+    max_depth_limit: float | None
+    if args.no_max_depth:
+        max_depth_limit = None
+    else:
+        max_depth_limit = float(args.max_depth)
+        if max_depth_limit <= 0:
+            raise ValueError("--max-depth must be > 0")
 
     data_dir = Path(__file__).parent
     paths = _resolve_inputs(args.inputs)
@@ -308,6 +325,8 @@ def main() -> None:
             continue
 
         depths = [d for d in compute_depths(pts) if d >= 0.0]
+        if max_depth_limit is not None:
+            depths = [d for d in depths if d <= max_depth_limit]
         if not depths:
             print(f"skip: {path} (深さ(depth)が計算できません)")
             continue
@@ -323,20 +342,14 @@ def main() -> None:
         print("有効な N データがありませんでした")
         return
 
-    print(f"ALL: N={len(all_depths)} mean_depth={mean(all_depths):.3f} Å")
+    if max_depth_limit is None:
+        print(f"ALL: N={len(all_depths)} mean_depth={mean(all_depths):.3f} Å")
+    else:
+        print(
+            f"ALL (<= {max_depth_limit:g} Å): N={len(all_depths)} mean_depth={mean(all_depths):.3f} Å"
+        )
 
     depths_for_plot = all_depths
-    if args.max_depth is not None:
-        max_depth_limit = float(args.max_depth)
-        if max_depth_limit <= 0:
-            raise ValueError("--max-depth must be > 0")
-        depths_for_plot = [d for d in all_depths if d <= max_depth_limit]
-        removed = len(all_depths) - len(depths_for_plot)
-        if removed:
-            print(f"NOTE: depth > {max_depth_limit:g} Å を {removed} 個、描画から除外しました")
-        if not depths_for_plot:
-            print("NOTE: 描画対象のデータが空です（--max-depth が小さすぎる可能性）")
-            return
 
     try:
         import matplotlib
@@ -364,7 +377,11 @@ def main() -> None:
     plt.xlim(0.0, float(xmax))
     plt.xlabel("nitrogen depth (Å)")
     plt.ylabel("count")
-    plt.title(f"Nitrogen depth histogram (n={len(all_depths)})")
+    title_n = len(depths_for_plot)
+    if max_depth_limit is None:
+        plt.title(f"Nitrogen depth histogram (n={title_n})")
+    else:
+        plt.title(f"Nitrogen depth histogram (n={title_n}, <= {max_depth_limit:g} Å)")
     plt.grid(True, alpha=0.3)
     plt.margins(x=0)
     plt.tight_layout()
