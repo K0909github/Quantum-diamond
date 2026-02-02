@@ -6,8 +6,8 @@
 
 1) N 原子（このデータでは dump の type=3）
 2) 表面からの深さ depth = surface_z - z が一定以上（デフォルト 5 nm = 50 Å）
-3) その N が、別の N と 5–10 nm の距離にある（磁気双極子相互作用を仮定）
-4) 上の(3)を満たす 2つの N が、それ以外の N から 10 nm 以上離れている
+3) その N が、別の N と 5–15 nm の距離にある（磁気双極子相互作用を仮定）
+4) 上の(3)を満たす 2つの N が、それ以外の N から 15 nm 以上離れている
 
 入力:
 - dump_run_1_min0K.lammpstrj (LAMMPS dump 形式)
@@ -131,7 +131,7 @@ def count_n_in_image_state(
 		if depth >= min_depth_a:
 			deep_indices.append(idx)
 
-	# (4) 5–10 nm の距離にある N ペアを列挙
+	# (3) 5–15 nm の距離にある N ペアを列挙
 	candidate_pairs: list[tuple[int, int]] = []
 	for a_i in range(len(deep_indices)):
 		i = deep_indices[a_i]
@@ -141,7 +141,7 @@ def count_n_in_image_state(
 			if min_pair_dist_a <= d <= max_pair_dist_a:
 				candidate_pairs.append((i, j))
 
-	# (5) その2つが「それ以外のN」から 10nm 以上離れているか
+	# (4) その2つが「それ以外のN」から 15nm 以上離れているか
 	qualifying: set[int] = set()
 	for i, j in candidate_pairs:
 		isolated = True
@@ -163,7 +163,7 @@ def count_n_in_image_state(
 	stats = {
 		"N_total_in_dump": len(n_positions),
 		"N_deep": len(deep_indices),
-		"pair_candidates_5to10nm": len(candidate_pairs),
+		"pair_candidates_5to15nm": len(candidate_pairs),
 		"N_in_image_state": len(qualifying),
 	}
 	return len(qualifying), stats
@@ -201,14 +201,14 @@ def main() -> None:
 	parser.add_argument(
 		"--pair-max-nm",
 		type=float,
-		default=10.0,
-		help="N-N 相互作用距離の上限 (nm) (default: 10.0)",
+		default=15.0,
+		help="N-N 相互作用距離の上限 (nm) (default: 15.0)",
 	)
 	parser.add_argument(
 		"--isolation-nm",
 		type=float,
-		default=10.0,
-		help="(5) 2つの相互作用Nが他のNから離れている距離の下限 (nm) (default: 10.0)",
+		default=15.0,
+		help="(4) 2つの相互作用Nが他のNから離れている距離の下限 (nm) (default: 15.0)",
 	)
 	parser.add_argument(
 		"--verbose",

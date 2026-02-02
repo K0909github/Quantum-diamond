@@ -45,12 +45,19 @@ def _resolve_inputs(raw_inputs: list[str] | None) -> list[Path]:
                 return [cand]
         return []
 
+    # 実行場所(cwd)が違っても動くように、相対パスは「スクリプトのあるフォルダ基準」でも探索する。
+    base_dir = Path(__file__).parent
+
     resolved: list[Path] = []
     for raw in raw_inputs:
         # run_*/... のようにディレクトリ側にワイルドカードがある場合は pathlib だけだと扱いにくいので、
         # 文字列globで先に展開する。
         if any(ch in raw for ch in ["*", "?", "[", "]"]):
             matches = sorted(glob.glob(raw, recursive=True))
+            if not matches:
+                p_raw = Path(raw)
+                if not p_raw.is_absolute():
+                    matches = sorted(glob.glob(str(base_dir / raw), recursive=True))
             for m in matches:
                 mp = Path(m)
                 if mp.is_dir():
@@ -62,6 +69,11 @@ def _resolve_inputs(raw_inputs: list[str] | None) -> list[Path]:
             continue
 
         p = Path(raw)
+        if not p.is_absolute() and not p.exists() and not p.is_dir():
+            # cwd基準で見つからない相対パスは、スクリプト基準でも探す
+            p2 = base_dir / p
+            if p2.exists() or p2.is_dir():
+                p = p2
 
         if p.is_dir():
             hit = next((c for c in _candidate_n_files_in_dir(p) if c.exists()), None)
@@ -82,6 +94,20 @@ def _resolve_inputs(raw_inputs: list[str] | None) -> list[Path]:
                     resolved.append(hit)
             elif m.exists():
                 resolved.append(m)
+
+        # 親がcwd基準だとズレることがあるので、スクリプト基準でも同じパターンを試す
+        if not resolved and not p.is_absolute():
+            parent2 = (base_dir / parent).resolve()
+            try:
+                for m in sorted(parent2.glob(pattern)):
+                    if m.is_dir():
+                        hit = next((c for c in _candidate_n_files_in_dir(m) if c.exists()), None)
+                        if hit is not None:
+                            resolved.append(hit)
+                    elif m.exists():
+                        resolved.append(m)
+            except FileNotFoundError:
+                pass
 
     uniq: list[Path] = []
     seen: set[Path] = set()
@@ -397,13 +423,20 @@ def main() -> None:
         print(f"inputs: {args.inputs!r}")
         if args.inputs:
             for raw in args.inputs:
-                # どの入力がどう解釈されているかを出して、相対パス違い/タイポ/出力ファイル未生成を切り分ける。
                 if any(ch in raw for ch in ["*", "?", "[", "]"]):
                     matches = sorted(glob.glob(raw, recursive=True))
+                    if not matches:
+                        p_raw = Path(raw)
+                        if not p_raw.is_absolute():
+                            matches = sorted(glob.glob(str(data_dir / raw), recursive=True))
                     print(f"- glob: {raw!r} -> {len(matches)} matches")
                 else:
                     p = Path(raw)
-                    print(f"- path: {raw!r} -> exists={p.exists()} resolved={p.resolve()}")
+                    p2 = (data_dir / p) if (not p.is_absolute()) else p
+                    print(
+                        f"- path: {raw!r} -> exists(cwd)={p.exists()} exists(script_dir)={p2.exists()} "
+                        f"resolved(cwd)={p.resolve()} resolved(script_dir)={p2.resolve()}"
+                    )
         return
 
     all_depths: list[float] = []
