@@ -48,6 +48,7 @@ timestep        0.0001
 
 thermo          100
 thermo_style    custom step time ke pe etotal temp
+thermo_modify   lost ignore
 
 # 連続出力: 1本のdumpに全期間を保存
 dump            d1 all xyz 100 dump_all.xyz

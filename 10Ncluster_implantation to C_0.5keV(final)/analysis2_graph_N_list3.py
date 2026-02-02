@@ -2,6 +2,8 @@
 
 対応フォーマット:
 - LAMMPS dump 形式: 先頭に `ITEM:` があり、`ITEM: ATOMS ...` の後に座標が続く
+    - 座標列は `x y z` だけでなく `xu yu zu` や `xs ys zs` でもOK
+    - `xs ys zs`（scaled）の場合は `ITEM: BOX BOUNDS` を用いて実座標へ変換
 - OVITO のテキスト出力風: 先頭に `#` のヘッダ行があり、列に `Position.X Position.Y Position.Z` が含まれる
 
 メモ:
@@ -96,39 +98,94 @@ def _read_positions_from_lammps_dump(path: Path, atom_type: int | None) -> list[
     """LAMMPS dump 形式から (x, y, z) を読む。
 
     複数スナップショットが入っている場合は、最後の ITEM: ATOMS ブロックを採用する。
+    `x y z` / `xu yu zu` / `xs ys zs` をサポートする。
     """
 
     positions: list[tuple[float, float, float]] = []
     current: list[tuple[float, float, float]] = []
-    reading = False
+    reading_atoms = False
     x_idx = y_idx = z_idx = None
     type_idx: int | None = None
+    coord_mode: str | None = None  # 'abs' | 'scaled'
+    box_bounds: tuple[float, float, float, float, float, float] | None = None
 
-    for raw_line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+    def _pick_idx(cols_lower: list[str], candidates: list[str]) -> int | None:
+        for name in candidates:
+            if name in cols_lower:
+                return cols_lower.index(name)
+        return None
+
+    def _maybe_scaled_to_abs(value: float, lo: float, hi: float) -> float:
+        return lo + value * (hi - lo)
+
+    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    i = 0
+    while i < len(lines):
+        raw_line = lines[i]
+        i += 1
+
         line = raw_line.strip()
         if not line:
             continue
 
         if line.startswith("ITEM:"):
+            if line.startswith("ITEM: BOX BOUNDS"):
+                # 次の3行が bounds
+                if i + 2 >= len(lines):
+                    continue
+
+                def _parse_bounds_row(s: str) -> tuple[float, float] | None:
+                    parts = s.split()
+                    if len(parts) < 2:
+                        return None
+                    try:
+                        lo = float(parts[0])
+                        hi = float(parts[1])
+                    except ValueError:
+                        return None
+                    return lo, hi
+
+                bx = _parse_bounds_row(lines[i].strip())
+                by = _parse_bounds_row(lines[i + 1].strip())
+                bz = _parse_bounds_row(lines[i + 2].strip())
+                i += 3
+                if bx is None or by is None or bz is None:
+                    box_bounds = None
+                else:
+                    box_bounds = (bx[0], bx[1], by[0], by[1], bz[0], bz[1])
+                continue
+
             if line.startswith("ITEM: ATOMS"):
                 cols = line.split()[2:]
                 col_l = [c.lower() for c in cols]
-                try:
-                    x_idx = col_l.index("x")
-                    y_idx = col_l.index("y")
-                    z_idx = col_l.index("z")
-                except ValueError:
-                    x_idx = y_idx = z_idx = None
+
+                x_idx = _pick_idx(col_l, ["x", "xu", "xsu", "xus", "xs"])
+                y_idx = _pick_idx(col_l, ["y", "yu", "ysu", "yus", "ys"])
+                z_idx = _pick_idx(col_l, ["z", "zu", "zsu", "zus", "zs"])
                 type_idx = col_l.index("type") if "type" in col_l else None
+
+                if x_idx is not None and y_idx is not None and z_idx is not None:
+                    x_name = col_l[x_idx]
+                    y_name = col_l[y_idx]
+                    z_name = col_l[z_idx]
+                    if x_name.endswith("s") and y_name.endswith("s") and z_name.endswith("s"):
+                        coord_mode = "scaled"
+                    else:
+                        coord_mode = "abs"
+                else:
+                    coord_mode = None
+
                 current = []
-                reading = True
-            else:
-                if reading:
-                    positions = current
-                reading = False
+                reading_atoms = True
+                continue
+
+            # 他のITEMに入ったら、直前のATOMSブロックを採用
+            if reading_atoms:
+                positions = current
+            reading_atoms = False
             continue
 
-        if not reading or x_idx is None or y_idx is None or z_idx is None:
+        if not reading_atoms or x_idx is None or y_idx is None or z_idx is None or coord_mode is None:
             continue
 
         tokens = line.split()
@@ -144,15 +201,27 @@ def _read_positions_from_lammps_dump(path: Path, atom_type: int | None) -> list[
                 continue
             if t != atom_type:
                 continue
+
         try:
-            x = float(tokens[x_idx])
-            y = float(tokens[y_idx])
-            z = float(tokens[z_idx])
+            x_raw = float(tokens[x_idx])
+            y_raw = float(tokens[y_idx])
+            z_raw = float(tokens[z_idx])
         except ValueError:
             continue
+
+        if coord_mode == "scaled":
+            if box_bounds is None:
+                continue
+            xlo, xhi, ylo, yhi, zlo, zhi = box_bounds
+            x = _maybe_scaled_to_abs(x_raw, xlo, xhi)
+            y = _maybe_scaled_to_abs(y_raw, ylo, yhi)
+            z = _maybe_scaled_to_abs(z_raw, zlo, zhi)
+        else:
+            x, y, z = x_raw, y_raw, z_raw
+
         current.append((x, y, z))
 
-    if reading and current:
+    if reading_atoms and current:
         positions = current
 
     return positions
@@ -284,7 +353,15 @@ def main() -> None:
     parser.add_argument("--surface-z", type=float, default=SURFACE_Z, help="表面 z 座標 (Å)")
     parser.add_argument("--bin-width", type=float, default=float(BIN_WIDTH), help="ビン幅 (Å)")
     parser.add_argument("--atom-type", type=int, default=None, help="LAMMPS dump の type フィルタ（例: N=3）")
-    parser.add_argument("--out", type=str, default="nitrogen_depths.png", help="出力画像名")
+    parser.add_argument(
+        "--out",
+        type=str,
+        default="nitrogen_depths.png",
+        help=(
+            "出力画像（パス可）。ファイル名のみならスクリプトと同じフォルダに保存。"
+            "ディレクトリを含む相対パスならカレントディレクトリ基準で保存。"
+        ),
+    )
     parser.add_argument(
         "--max-depth",
         type=float,
@@ -387,7 +464,13 @@ def main() -> None:
     plt.tight_layout()
 
     out_arg = Path(args.out)
-    out_path = out_arg if out_arg.is_absolute() else (data_dir / out_arg)
+    if out_arg.is_absolute():
+        out_path = out_arg
+    elif out_arg.parent != Path("."):
+        out_path = Path.cwd() / out_arg
+    else:
+        # 従来互換: ファイル名だけ指定された場合はスクリプトのあるフォルダに出す
+        out_path = data_dir / out_arg
     out_path.parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(out_path, dpi=200)
     print(f"Saved: {out_path}")
