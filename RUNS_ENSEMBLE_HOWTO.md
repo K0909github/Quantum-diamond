@@ -351,3 +351,144 @@ ls "10Ncluster_implantation to C_7keV(final)/runs/run_01"
   - 対処: 文字列は必ずダブルクォートで囲む（例: `"10Ncluster_implantation to C_7keV(final)/..."`）
 
 こちらで原因を特定するため、エラーが出たときは「実行したコマンド」と「Traceback全文」をそのまま貼ってください。
+
+## 付録: 「run_01..run_10」で何を変えているか（run10まで回る仕組み）
+
+2つのコマンド例は、どちらも [tools/run_ensemble_implantation.py](tools/run_ensemble_implantation.py) が
+テンプレート入力を複製して `run_01` 〜 `run_10` を作り、各 run で **変数（seed / 注入位置 or 乱数基準seed）だけを差し替える**ことで実現しています。
+
+共通の仕組み（どのテンプレでも同じ）:
+
+- `--runs 10` により `run_01`〜`run_10` の **10フォルダ**を作ります（`run_{i:02d}` 形式）。
+- それぞれの run フォルダに
+  - テンプレフォルダから `*.data`, `*.zbl`, `*.tersoff*`（`--copy` で変更可）をコピー
+  - 入力ファイルをパッチして `in.lmp` として保存
+  - 実際に差し替えた値を `run_params.txt` に保存
+- `--lammps "..."` を付けると、各 run フォルダをカレントにして、そのコマンドを **run_01 → run_02 → … → run_10 の順に逐次実行**します。
+
+つまり「run10までやってる」のは、LAMMPS 側ではなく Python 側の `--runs 10` の for ループです。
+
+### A) 10クラスターを10回（template-style: simple / デフォルト）
+
+例（あなたのコマンド）:
+
+```bash
+python3 tools/run_ensemble_implantation.py --template-dir "10Ncluster_implantation to C_7keV(final)" --input "10atoms_7keV_N_implantation_to_C_ZBL_potential_filedata.txt" --out "10Ncluster_implantation to C_7keV(final)/runs" --runs 10 --seed 12345 --x-range -20 20 --y-range -20 20 --lammps "mpirun -np 8 lmp -in in.lmp"
+```
+
+このケースでは、各 `run_XX/in.lmp` の中で次の行を **runごとに直接書き換え**ます:
+
+- `variable seed equal ...`
+- `variable x_pos equal ...`
+- `variable y_pos equal ...`
+
+runごとの値の決まり方（実装）:
+
+- 乱数生成器は `random.Random(--seed)` で初期化され、`x_pos/y_pos` はそこから一様乱数で作られます。
+  - `--seed 12345` を固定すると、毎回同じ `run_01..run_10` が再現されます。
+- `seed` は `seed_i = (--seed) + i`（i は 1..10）になります。
+  - 例: `run_01` は 12346、`run_10` は 12355。
+
+ここでいう「10回」は **10回の独立な単発注入（初期状態から開始）**です。
+（テンプレ側が「前runの最終構造を読み込む」作りでない限り、run間で状態は引き継がれません）
+
+### B) 10連続照射を10回（template-style: loop-random-xy）
+
+例（あなたのコマンド）:
+
+```bash
+python3 tools/run_ensemble_implantation.py \
+  --template-style loop-random-xy \
+  --template-dir "N_implantation_to_C_random_5keV_noreset_10_10(final)" \
+  --input "1atoms_5keV_N_implantation_to_C_ZBL_potential_filedata.txt" \
+  --out "N_implantation_to_C_random_5keV_noreset_10_10(final)/runs_ensemble" \
+  --runs 10 \
+  --seed 12345 \
+  --x-range -4.6 4.6 \
+  --y-range -4.6 4.6 \
+  --lammps "mpirun -np 8 lmp -in in.lmp"
+```
+
+このケースは「連続注入（noreset）」テンプレが、LAMMPS 入力内部で注入ループ（例: `variable m loop 10`）を回し、
+注入位置も入力内部の `random(...)` で決める前提です。
+そのため Python は `x_pos/y_pos` を数値に固定せず、**テンプレ内の次の行を runごとに差し替え**ます:
+
+- `variable rnd_seed equal ...`（連続注入ループで使う乱数seedの“基準値”）
+- `variable rnd_seed_y equal ...`
+- `variable x_pos equal random(xmin,xmax,${rnd_seed})`（random の範囲だけ）
+- `variable y_pos equal random(ymin,ymax,${rnd_seed_y})`
+
+runごとの値の決まり方（実装）:
+
+- `seed_x_base = (--seed) + 1000*i`
+- `seed_y_base = (--seed) + 50000 + 1000*i`
+- `x_pos/y_pos` の範囲は `--x-range/--y-range` をそのまま `random(xmin,xmax,...)` に反映
+
+注意:
+
+- この `loop-random-xy` では、Python 側の乱数（`random.Random(...)`）は注入位置の生成に使いません。
+  `--seed` は「テンプレ内で使う rnd_seed の基準値」を runごとにずらすための元になります。
+
+#### 具体例（デフォルト値での run1 / run2）
+
+例として、コマンドが次だとします（あなたの例と同じ値）:
+
+- `--runs 10`
+- `--seed 12345`
+- `--x-range -4.6 4.6`
+- `--y-range -4.6 4.6`
+
+このとき Python が各 run の `in.lmp` に書き込むのは、概ね次の形です（`${m}` はテンプレ側の loop 変数）:
+
+- `variable rnd_seed equal seed_x_base+${m}`
+- `variable rnd_seed_y equal seed_y_base+${m}`
+- `variable x_pos equal random(-4.6,4.6,${rnd_seed})`
+- `variable y_pos equal random(-4.6,4.6,${rnd_seed_y})`
+
+そして `seed_x_base / seed_y_base` は run 番号 `i`（run_01 なら i=1）から次で決まります:
+
+- `seed_x_base = 12345 + 1000*i`
+- `seed_y_base = 12345 + 50000 + 1000*i`
+
+なので具体的には:
+
+- run_01（i=1）
+  - `seed_x_base = 13345`
+  - `seed_y_base = 63345`
+  - もしテンプレが `variable m loop 10`（m=1..10）なら
+    - x側 seed: `rnd_seed = 13345+${m}` → 13346, 13347, …, 13355
+    - y側 seed: `rnd_seed_y = 63345+${m}` → 63346, 63347, …, 63355
+    - 各 m ごとに `x_pos=random(-4.6,4.6,<その時のseed>)`、`y_pos=random(-4.6,4.6,<その時のseed>)` が1回ずつ決まり、合計10回の (x,y) が生成されます。
+
+- run_02（i=2）
+  - `seed_x_base = 14345`
+  - `seed_y_base = 64345`
+  - m=1..10 のとき
+    - x側 seed: 14346..14355
+    - y側 seed: 64346..64355
+
+ポイント:
+
+- run_01 と run_02 は「基準seed」が違うので、同じ `m=1..10` を回しても (x,y) の系列が別物になります。
+- `--x-range/--y-range` は **範囲**を変えるだけで、「10回回す」はテンプレ内の loop 回数（例: `loop 10`）で決まります。
+
+### 「連続照射」は2通りある（意味が違う）
+
+連続照射（10回照射）をやりたいとき、次の2パターンは物理的な意味が変わります。
+
+1) 同一run内で連続（テンプレ内で loop 10）
+
+- 1つの run フォルダで LAMMPS を1回走らせ、その入力の中で注入を10回繰り返します。
+- noreset テンプレなら、**照射ダメージが蓄積した状態**で次の注入が行われます。
+
+2) run を分けて実行（run_01..run_10 を別々に走らせる）
+
+- `template-style simple` の 10回は、基本的に **初期状態からの単発注入×10回**の独立試行です。
+- `template-style loop-random-xy` の 10回は、**「10連続照射」を1セットとして**それを独立に10回（= 10照射×10run）やる、という意味になります。
+
+3) （重要）runを分けて「連続照射を繋ぐ」
+
+- 「run_01 の最終構造を run_02 が読み、さらに1照射…」のように、**run間で状態を引き継いで連続照射**したい場合、
+  現状の [tools/run_ensemble_implantation.py](tools/run_ensemble_implantation.py) はその“チェーン”を自動生成しません。
+- 実現するには、テンプレ入力側で `read_data` / `read_restart` の参照先を前runの出力に向ける（または手動で run を1つのフォルダで連続実行する）必要があります。
+
