@@ -251,6 +251,12 @@ def main() -> None:
     parser.add_argument("--label-b", type=str, default=None, help="凡例に表示するデータセットBの名前")
     parser.add_argument("--surface-z", type=float, default=SURFACE_Z, help="表面 z 座標 (Å)")
     parser.add_argument("--bin-width", type=float, default=float(BIN_WIDTH), help="ビン幅 (Å)")
+    parser.add_argument(
+        "--xmax",
+        type=float,
+        default=50.0,
+        help="深さの表示上限 (Å)。0以下を指定するとデータから自動推定",
+    )
     parser.add_argument("--out", type=str, default="vacancy_depths_overlay.png", help="出力画像名")
     args = parser.parse_args()
     SURFACE_Z = float(args.surface_z)
@@ -281,7 +287,8 @@ def main() -> None:
         max_depth = max(max_depth, max(depths_a))
     if depths_b:
         max_depth = max(max_depth, max(depths_b))
-    xmax = float(math.ceil(max_depth / BIN_WIDTH) * BIN_WIDTH) if max_depth > 0 else float(BIN_WIDTH)
+    xmax_data = float(math.ceil(max_depth / BIN_WIDTH) * BIN_WIDTH) if max_depth > 0 else float(BIN_WIDTH)
+    xmax = float(args.xmax) if float(args.xmax) > 0 else xmax_data
 
     label_a = args.label_a
     if label_a is None:
