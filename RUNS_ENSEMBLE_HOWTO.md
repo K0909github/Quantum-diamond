@@ -214,6 +214,50 @@ python3 "10Ncluster_implantation to C_0.5keV(final)/analysis3_graph_vacancy_list
   --bin-width 1
 ```
 
+## 2b) vacancy の深さ分布（2条件を重ね描き: 例 5keV vs 7keV）
+
+`analysis3_graph_vacancy_list2.py` は、2つの `vacancy_list`（またはその親フォルダ）を指定して、
+深さ分布を **線グラフ2本**で同じ図に重ね描きして保存します。
+
+前提（あなたの想定）:
+
+- `10Ncluster_implantation to C_5keV(final)` と同じ階層に `analysis3_graph_vacancy_list2.py` を置く
+  - 例: `10Ncluster_implantation to C_5keV(final)/analysis3_graph_vacancy_list2.py`
+- 比較したい入力は
+  - `10Ncluster_implantation to C_5keV(final)/runs/run_01/vacancy_list`
+  - `10Ncluster_implantation to C_7keV(final)/runs/run_01/vacancy_list`
+
+PowerShell 例（リポジトリルートで実行）:
+
+```powershell
+python "10Ncluster_implantation to C_5keV(final)/analysis3_graph_vacancy_list2.py" `
+  --a "10Ncluster_implantation to C_5keV(final)/runs/run_01/vacancy_list" `
+  --b "10Ncluster_implantation to C_7keV(final)/runs/run_01/vacancy_list" `
+  --label-a "10cluster total 5keV" `
+  --label-b "10cluster 7keV" `
+  --surface-z 125 `
+  --bin-width 1 `
+  --out "vacancy_depths_5keV_vs_7keV_run01.png"
+```
+
+Ubuntu/WSL(bash) 例:
+
+```bash
+python3 "10Ncluster_implantation to C_5keV(final)/analysis3_graph_vacancy_list2.py" \
+  --a "10Ncluster_implantation to C_5keV(final)/runs/run_01/vacancy_list" \
+  --b "10Ncluster_implantation to C_7keV(final)/runs/run_01/vacancy_list" \
+  --label-a "10cluster total 5keV" \
+  --label-b "10cluster 7keV" \
+  --surface-z 125 \
+  --bin-width 1 \
+  --out "vacancy_depths_5keV_vs_7keV_run01.png"
+```
+
+補足:
+
+- `--a` / `--b` には `vacancy_list` ファイルだけでなく、`run_01` のような **フォルダ**も指定できます（その場合はフォルダ内の `vacancy_list.xyz / vacancy_list / vacancy_list.txt` を自動探索します）。
+- `--bin-width` は「線グラフの刻み（ヒストグラムのビン幅）」です。滑らかにしたい場合は大きく（例: 2〜5Å）、細かく見たい場合は小さく（例: 1Å）します。
+
 ## 3) N の深さ分布（10回分をまとめて）
 
 注意:
