@@ -11,6 +11,15 @@
     variable        x_pos equal 0.0
     variable        y_pos equal 0.0
 
+    もしくは「2回連続照射」テンプレの場合は以下の形式にも対応:
+        variable        seed equal 12345
+        variable        x_pos_1 equal -75.0
+        variable        y_pos_1 equal -75.0
+        variable        x_pos_2 equal  75.0
+        variable        y_pos_2 equal  75.0
+    この場合、--x-range/--y-range は (x,y) の平行移動量として扱い、
+    2点の相対配置（各軸 150Å）を保ったまま run ごとにずらします。
+
 使い方例（フォルダ生成だけ）
   python tools/run_ensemble_implantation.py \
     --template-dir "10Ncluster_implantation to C_5keV" \
@@ -59,7 +68,10 @@ class RunSpecLoopRandomXY:
     loop_var: str = "m"
 
 
-_VAR_RE = re.compile(r"^(?P<indent>\s*)variable\s+(?P<name>seed|x_pos|y_pos)\s+equal\s+.*$", re.IGNORECASE)
+_VAR_RE = re.compile(
+    r"^(?P<indent>\s*)variable\s+(?P<name>seed|x_pos|y_pos|x_pos_1|y_pos_1|x_pos_2|y_pos_2)\s+equal\s+.*$",
+    re.IGNORECASE,
+)
 
 _VAR_RND_SEED_RE = re.compile(r"^(?P<indent>\s*)variable\s+rnd_seed\s+equal\s+.*$", re.IGNORECASE)
 _VAR_RND_SEED_Y_RE = re.compile(r"^(?P<indent>\s*)variable\s+rnd_seed_y\s+equal\s+.*$", re.IGNORECASE)
@@ -80,7 +92,18 @@ def _write_text(path: Path, text: str) -> None:
 
 
 def _patch_lammps_input(template_text: str, run: RunSpec) -> str:
-    replaced = {"seed": False, "x_pos": False, "y_pos": False}
+    two_shot = bool(re.search(r"^\s*variable\s+x_pos_1\s+equal\s+", template_text, flags=re.IGNORECASE | re.MULTILINE))
+
+    if two_shot:
+        replaced = {
+            "seed": False,
+            "x_pos_1": False,
+            "y_pos_1": False,
+            "x_pos_2": False,
+            "y_pos_2": False,
+        }
+    else:
+        replaced = {"seed": False, "x_pos": False, "y_pos": False}
 
     out_lines: list[str] = []
     for raw_line in template_text.splitlines(keepends=False):
@@ -94,10 +117,19 @@ def _patch_lammps_input(template_text: str, run: RunSpec) -> str:
         if name == "seed":
             out_lines.append(f"{indent}variable        seed equal {run.seed}")
             replaced["seed"] = True
-        elif name == "x_pos":
+        elif two_shot and name in {"x_pos_1", "y_pos_1", "x_pos_2", "y_pos_2"}:
+            # 2回連続照射テンプレ: 2点の相対配置(±75Å)を維持し、run.x_pos/run.y_pos を平行移動量として適用
+            base = -75.0 if name.endswith("_1") else 75.0
+            if name.startswith("x_"):
+                value = base + float(run.x_pos)
+            else:
+                value = base + float(run.y_pos)
+            out_lines.append(f"{indent}variable        {name} equal {value:.6f}")
+            replaced[name] = True
+        elif (not two_shot) and name == "x_pos":
             out_lines.append(f"{indent}variable        x_pos equal {run.x_pos:.6f}")
             replaced["x_pos"] = True
-        elif name == "y_pos":
+        elif (not two_shot) and name == "y_pos":
             out_lines.append(f"{indent}variable        y_pos equal {run.y_pos:.6f}")
             replaced["y_pos"] = True
         else:
@@ -105,6 +137,10 @@ def _patch_lammps_input(template_text: str, run: RunSpec) -> str:
 
     missing = [k for k, v in replaced.items() if not v]
     if missing:
+        if two_shot:
+            raise ValueError(
+                "テンプレ入力に variable 行が見つかりません(two-shot): " + ", ".join(missing)
+            )
         raise ValueError(
             "テンプレ入力に variable 行が見つかりません: " + ", ".join(missing)
         )
