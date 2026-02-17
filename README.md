@@ -109,6 +109,12 @@ dump の最後のスナップショットを読み、条件（深さ・N-N距離
 python goodanalysis.py --dump "10Ncluster_implantation to C_0.5keV(final)/dump_run_1_min0K.lammpstrj" --verbose
 ```
 
+距離分布（N-N原子間距離のヒストグラム）も同時に確認したい場合は `goodanalysis2.py` を使います。
+
+```powershell
+python goodanalysis2.py --dump "10Ncluster_implantation to C_0.5keV(final)/dump_run_1_min0K.lammpstrj" --verbose --plot-dist-hist --hist-scope all --hist-output "dist_hist.png"
+```
+
 ## パラメータの目安（surface_z など）
 
 - 深さは `depth = surface_z - z`（Å）で定義しています。
