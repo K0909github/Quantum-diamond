@@ -22,7 +22,7 @@
   # N-N 原子間距離のヒストグラム（横軸:距離[nm], 縦軸:個数）を保存
   python goodanalysis2.py \
 	--dump "10Ncluster_implantation to C_0.5keV(final)\\dump_run_1_min0K.lammpstrj" \
-	--plot-dist-hist --hist-scope all --hist-output "dist_hist.png"
+	--plot-dist-hist --hist-output "dist_hist.png"
 """
 
 from __future__ import annotations
@@ -156,6 +156,7 @@ def plot_distance_histogram(
 	bins: int,
 	output: Path | None,
 	range_nm: tuple[float, float] | None,
+	density: bool,
 ) -> None:
 	if len(distances_a) == 0:
 		print("距離データが0件のため、ヒストグラムは作成しませんでした。")
@@ -175,10 +176,11 @@ def plot_distance_histogram(
 		distances_nm,
 		bins=int(bins),
 		range=range_nm,
+		density=bool(density),
 	)
 	# 日本語フォントが無い環境でも警告が出ないように英語ラベルにする
 	plt.xlabel("Interatomic distance (nm)")
-	plt.ylabel("Count")
+	plt.ylabel("Density" if density else "Count")
 	plt.tight_layout()
 
 	if output is not None:
@@ -301,14 +303,19 @@ def main() -> None:
 	parser.add_argument(
 		"--hist-scope",
 		choices=["all", "deep"],
-		default="deep",
-		help="ヒストグラムに使うNの範囲: all=全N, deep=深さ条件を満たすN (default: deep)",
+		default="all",
+		help="ヒストグラムに使うNの範囲: all=全N, deep=深さ条件を満たすN (default: all)",
 	)
 	parser.add_argument(
 		"--hist-bins",
 		type=int,
 		default=30,
 		help="ヒストグラムのビン数 (default: 30)",
+	)
+	parser.add_argument(
+		"--hist-density",
+		action="store_true",
+		help="個数ではなく確率密度（正規化）で表示する。N数が揃わない比較に有効",
 	)
 	parser.add_argument(
 		"--hist-range-nm",
@@ -359,8 +366,21 @@ def main() -> None:
 				if depth >= min_depth_a:
 					deep_indices.append(idx)
 			dists_a = pairwise_distances(n_positions, deep_indices)
+			n_used = len(deep_indices)
 		else:
 			dists_a = pairwise_distances(n_positions, None)
+			n_used = len(n_positions)
+
+		# 比較・デバッグ用の要約（N数が揃っていないときの混乱を避ける）
+		if len(dists_a) > 0:
+			d_nm = [d / ANGSTROM_PER_NM for d in dists_a]
+			d_nm_sorted = sorted(d_nm)
+			median_nm = d_nm_sorted[len(d_nm_sorted) // 2]
+			print(
+				f"hist_scope={args.hist_scope}, N_used={n_used}, pair_count={len(dists_a)}, "
+				f"mean_nm={sum(d_nm)/len(d_nm):.3f}, median_nm={median_nm:.3f}, "
+				f"min_nm={d_nm_sorted[0]:.3f}, max_nm={d_nm_sorted[-1]:.3f}"
+			)
 
 		range_nm = tuple(args.hist_range_nm) if args.hist_range_nm is not None else None
 		plot_distance_histogram(
@@ -368,6 +388,7 @@ def main() -> None:
 			bins=int(args.hist_bins),
 			output=args.hist_output,
 			range_nm=range_nm,
+			density=bool(args.hist_density),
 		)
 
 

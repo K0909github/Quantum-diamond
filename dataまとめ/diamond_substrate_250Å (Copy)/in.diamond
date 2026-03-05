@@ -1,0 +1,80 @@
+# ------------------------ INITIALIZATION (初期設定) ------------------------
+#
+units           metal
+dimension       3
+boundary        p p p
+atom_style      atomic
+newton on
+neighbor        2.0 bin
+neigh_modify    every 1 delay 0 check yes
+
+
+# ------------------------ ATOM DEFINITION (原子とシミュレーション空間の定義) ------------------------
+region          mybox0 block -250 250 -250 250 -250 250 units box
+create_box      2 mybox0
+
+#  Si -> C (Diamond) への変更点 
+# 格子定数を Si(5.431) から Diamond(3.567) に変更
+lattice         diamond 3.567
+# 質量を Si(28.085) から Carbon(12.011) に変更
+mass            1 12.011
+mass            2 12.011
+
+
+# ------------------------ GEOMETRY & GROUPING (原子配置とグループ化) ------------------------
+# --- ダイヤモンド基板の作成 ---
+# 深さ(厚さ)を約108Å (-54.31〜54.31) から 250Å (-125〜125) に拡張
+region          mybox1 block -80 80 -80 80 -125 125 units box
+create_atoms    1 region mybox1
+#  C への変更点 
+group           C_sub type 1
+
+# --- 周囲を囲む壁の作成 (Siスクリプト と同じ領域サイズ) ---
+region          wall_2 block -92 -80.01 -80 80 -125 125 units box
+create_atoms    2 region wall_2
+group           side2 type 2
+
+region          wall_3 block 80.01 92 -80 80 -125 125 units box
+create_atoms    2 region wall_3
+group           side3 type 2
+
+region          wall_4 block -92 92 -92 -80.01 -125 125 units box
+create_atoms    2 region wall_4
+group           side4 type 2
+
+region          wall_5 block -92 92 80.01 92 -125 125 units box
+create_atoms    2 region wall_5
+group           side5 type 2
+
+region          wall_6 block -92 92 -92 92 -130.0 -125.09 units box
+create_atoms    2 region wall_6
+group           side6 type 2
+
+group           fixed_atoms union side2 side3 side4 side5 side6
+
+# ------------------------ INITIAL CONDITIONS & POTENTIAL (初期条件とポテンシャルの設定) ------------------------
+# (データファイルに書き込むため、速度も設定します)
+velocity        fixed_atoms set 0.0 0.0 0.0
+# C への変更点 
+velocity        C_sub create 300 12345 mom yes dist gaussian
+
+#  C への変更点 
+# ポテンシャルを diamond_nv.tersoff.zbl に変更
+pair_style      tersoff/zbl
+pair_coeff      * * diamond_nv.tersoff.zbl C C
+
+# ------------------------ DUMP & DATA FILE OUTPUT (ファイルの出力) ------------------------
+
+# "dump 1" は dump ID, "all" は全原子, "custom 1" は1ステップごと
+# (run 0 なのでステップ0のみ), "dump.diamond" はファイル名
+dump            1 all custom 1 dump.diamond id type x y z
+
+# 'run 0' はシミュレーション時間を進めません (fix不要)。
+# これにより、ステップ0のダンプファイル出力を安全にトリガーできます。
+run             0
+
+#
+# 基板サイズと状態がわかるファイル名に変更
+write_data      diamond_160A_with_vacancies.data
+
+print           "--- Initial diamond structure (step 0) has been created and dumped. ---"
